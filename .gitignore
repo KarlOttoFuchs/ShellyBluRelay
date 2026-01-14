@@ -1,0 +1,81 @@
+# macOS
+.DS_Store
+.AppleDouble
+.LSOverride
+._*
+
+# KiCad temporary files
+*.000
+*.bak
+*.bck
+*.kicad_pcb-bak
+*.kicad_sch-bak
+*.kicad_prl
+*.sch-bak
+*.lck
+*~
+_autosave-*
+*.tmp
+*-save.pro
+*-save.kicad_pcb
+fp-info-cache
+
+# KiCad netlist and autorouter files
+*.net
+*.dsn
+*.ses
+
+# KiCad footprint association files
+*.cmp
+
+# KiCad backup directories
+*-backups/
+
+# KiCad exported files (optional - uncomment if you don't want to track these)
+# *.xml
+# *.csv
+# *.tsv
+
+# Production files (generated from KiCad - uncomment if you don't want to track)
+# production/*.zip
+# production/backups/
+
+# Logs
+*.log
+*.raw
+
+# ESP-IDF / PlatformIO build artifacts
+build/
+.pio/
+.vscode/
+.idea/
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+env/
+venv/
+ENV/
+
+# Firmware binaries
+*.bin
+*.elf
+*.map
+
+# BMAD directories (AI agent framework)
+.bmad-core/
+_bmad/
+_bmad-output/
+.claude/
+
+# Temporary and scratch files
+tmp/
+temp/
+*.swp
+*.swo
+
+# Git
+*.orig
