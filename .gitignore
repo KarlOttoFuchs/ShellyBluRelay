@@ -65,10 +65,14 @@ ENV/
 *.elf
 *.map
 
-# BMAD directories (AI agent framework)
+# BMAD AI agent framework (exclude templates and core)
 .bmad-core/
 _bmad/
-_bmad-output/
+
+# BMAD output - exclude implementation artifacts but track planning docs
+_bmad-output/implementation-artifacts/
+
+# Claude Code settings (local only)
 .claude/
 
 # Temporary and scratch files
