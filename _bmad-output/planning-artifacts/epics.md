@@ -538,14 +538,21 @@ So that I can decode sensor data and easily add support for new sensor types.
 
 **When** BTHome v2 packet is detected
 **Then** parser extracts packet header:
-- Device Info byte (bit 0 = encryption flag, bit 1 = trigger flag, bits 2-7 reserved)
+- Device Info byte per BTHome v2 spec:
+  - Bit 0: Encryption flag (0 = unencrypted, 1 = encrypted)
+  - Bit 1: Reserved
+  - Bit 2: Trigger-based device flag (0 = interval-based, 1 = event-triggered)
+  - Bits 3-4: Reserved
+  - Bits 5-7: BTHome Version (010 = v2)
 - Object ID-Length-Value (OLV) triplets that follow
+
+**And** parser validates BTHome version (bits 5-7 must equal 010 for v2)
 
 **And** parser validates encryption flag:
 - If encryption bit = 1, log warning "Encrypted packets not supported" and skip packet
 - If encryption bit = 0, proceed with parsing
 
-**And** parser extracts trigger flag (bit 1) to indicate button press or motion event
+**And** parser extracts trigger flag (bit 2) to indicate event-triggered advertising (button press, motion)
 
 **When** parsing OLV triplets
 **Then** parser iterates through triplets:
@@ -601,7 +608,7 @@ So that button presses can trigger relay activation.
 - RSSI value
 - Timestamp
 
-**And** trigger flag (bit 1 of device info byte) is set for button press events
+**And** trigger flag (bit 2 of device info byte) is set for button press events
 
 **And** serial command `BLE_EVENTS` returns last 10 decoded button events with timestamps
 

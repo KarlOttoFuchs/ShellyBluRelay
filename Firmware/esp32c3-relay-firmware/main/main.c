@@ -3,6 +3,11 @@
  *
  * Story 1.1: GPIO Initialization and Project Foundation
  * Story 1.2: Relay Control Component Integration
+ * Story 1.3: Button Input Component Integration
+ * Story 1.4: LED Control Component Integration
+ * Story 1.5: Serial Protocol Foundation & Hardware Test Suite
+ * Story 2.1: Initialize BLE Stack & Scan for Advertising Packets
+ * Story 2.2: Implement BTHome v2 Parser with Handler Registry
  */
 
 #include <stdio.h>
@@ -12,104 +17,13 @@
 #include "esp_log.h"
 #include "gpio_config.h"
 #include "relay_control.h"
+#include "button_input.h"
+#include "led_control.h"
+#include "serial_protocol.h"
+#include "ble_scanner.h"
+#include "bthome_parser.h"
 
 static const char *TAG = "MAIN";
-
-/**
- * Initialize non-relay GPIO pins (LEDs, button)
- *
- * NOTE: Relay initialization is handled separately by relay_control component
- * and MUST be called first in app_main() for safety (NFR1).
- *
- * @return ESP_OK on success, error code otherwise
- */
-esp_err_t gpio_init_peripherals(void) {
-    esp_err_t ret;
-
-    // ============================================================================
-    // Configure LED outputs (GPIO0, GPIO10)
-    // ============================================================================
-
-    // Configure GPIO0 (Error LED) as output
-    ret = gpio_set_direction(PIN_LED_ERROR, GPIO_MODE_OUTPUT);
-    if (ret != ESP_OK) {
-        ESP_LOGE(TAG, "Failed to configure error LED GPIO: %s", esp_err_to_name(ret));
-        relay_force_off();  // Safety first
-        return ret;
-    }
-    gpio_set_level(PIN_LED_ERROR, 0);  // LED off initially
-    ESP_LOGI(TAG, "Error LED GPIO0 configured");
-
-    // Configure GPIO10 (Status LED) as output
-    ret = gpio_set_direction(PIN_LED_STATUS, GPIO_MODE_OUTPUT);
-    if (ret != ESP_OK) {
-        ESP_LOGE(TAG, "Failed to configure status LED GPIO: %s", esp_err_to_name(ret));
-        relay_force_off();  // Safety first
-        return ret;
-    }
-    gpio_set_level(PIN_LED_STATUS, 0);  // LED off initially
-    ESP_LOGI(TAG, "Status LED GPIO10 configured");
-
-    // ============================================================================
-    // Configure button input (GPIO9) with internal pull-up
-    // ============================================================================
-
-    // Configure GPIO9 (Button) as input with pull-up
-    ret = gpio_set_direction(PIN_BUTTON, GPIO_MODE_INPUT);
-    if (ret != ESP_OK) {
-        ESP_LOGE(TAG, "Failed to configure button GPIO direction: %s", esp_err_to_name(ret));
-        relay_force_off();  // Safety first
-        return ret;
-    }
-
-    ret = gpio_set_pull_mode(PIN_BUTTON, GPIO_PULLUP_ONLY);
-    if (ret != ESP_OK) {
-        ESP_LOGE(TAG, "Failed to configure button GPIO pull-up: %s", esp_err_to_name(ret));
-        relay_force_off();  // Safety first
-        return ret;
-    }
-    ESP_LOGI(TAG, "Button GPIO9 configured (active-low with pull-up)");
-
-    return ESP_OK;
-}
-
-/**
- * GPIO test task: Blink status LED, log button state, and test relay
- */
-void gpio_test_task(void *pvParameters) {
-    bool led_state = false;
-    int cycle_count = 0;
-
-    ESP_LOGI(TAG, "Starting GPIO test - Status LED will blink, relay will cycle every 10s");
-
-    while (1) {
-        // Toggle status LED
-        led_state = !led_state;
-        gpio_set_level(PIN_LED_STATUS, led_state);
-        ESP_LOGI(TAG, "Status LED: %s", led_state ? "ON" : "OFF");
-
-        // Read and log button state
-        int button_state = gpio_get_level(PIN_BUTTON);
-        ESP_LOGI(TAG, "Button state: %s (raw level: %d)",
-                 button_state == 0 ? "PRESSED" : "RELEASED", button_state);
-
-        // Log current relay state
-        ESP_LOGI(TAG, "Relay state: %s", relay_get_state() ? "ON" : "OFF");
-
-        // Test relay cycling every 10 seconds (5 cycles * 2 seconds per LED toggle)
-        cycle_count++;
-        if (cycle_count >= 5) {
-            cycle_count = 0;
-            bool current_relay = relay_get_state();
-            esp_err_t ret = relay_set_state(!current_relay);
-            if (ret != ESP_OK) {
-                ESP_LOGE(TAG, "Failed to toggle relay");
-            }
-        }
-
-        vTaskDelay(pdMS_TO_TICKS(2000));  // 2 second delay
-    }
-}
 
 void app_main(void) {
     ESP_LOGI(TAG, "ESP32-C3 Relay Module - Starting initialization");
@@ -133,23 +47,92 @@ void app_main(void) {
     ESP_LOGI(TAG, "Relay control initialized (fail-safe default OFF)");
 
     // ============================================================================
-    // Initialize other peripherals (LEDs, button)
+    // Initialize button input component
     // ============================================================================
 
-    ret = gpio_init_peripherals();
+    ret = button_init();
     if (ret != ESP_OK) {
-        ESP_LOGE(TAG, "Peripheral GPIO initialization failed: %s", esp_err_to_name(ret));
+        ESP_LOGE(TAG, "Button initialization failed: %s", esp_err_to_name(ret));
         ESP_LOGE(TAG, "CRITICAL ERROR - System halted");
-        // relay_force_off() already called in gpio_init_peripherals() on failure
+        relay_force_off();  // Safety first
         while (1) {
             vTaskDelay(pdMS_TO_TICKS(1000));
         }
     }
 
-    ESP_LOGI(TAG, "Peripheral GPIO initialization complete");
+    ESP_LOGI(TAG, "Button input initialized");
 
-    // Create GPIO test task
-    xTaskCreate(gpio_test_task, "gpio_test", 2048, NULL, 5, NULL);
+    // ============================================================================
+    // Initialize LED control component
+    // ============================================================================
 
+    ret = led_init();
+    if (ret != ESP_OK) {
+        ESP_LOGE(TAG, "LED control initialization failed: %s", esp_err_to_name(ret));
+        ESP_LOGE(TAG, "CRITICAL ERROR - System halted");
+        relay_force_off();  // Safety first
+        while (1) {
+            vTaskDelay(pdMS_TO_TICKS(1000));
+        }
+    }
+
+    ESP_LOGI(TAG, "LED control initialized");
+
+    // Set status LED to slow blink pattern (listening mode indicator)
+    led_set_pattern(LED_STATUS, LED_PATTERN_BLINK_SLOW);
+
+    // ============================================================================
+    // Initialize serial protocol component
+    // ============================================================================
+
+    ret = serial_protocol_init();
+    if (ret != ESP_OK) {
+        ESP_LOGE(TAG, "Serial protocol initialization failed: %s", esp_err_to_name(ret));
+        ESP_LOGE(TAG, "CRITICAL ERROR - System halted");
+        relay_force_off();  // Safety first
+        while (1) {
+            vTaskDelay(pdMS_TO_TICKS(1000));
+        }
+    }
+
+    ESP_LOGI(TAG, "Serial protocol initialized (115200 baud)");
+
+    // ============================================================================
+    // Initialize BTHome parser component (Story 2.2)
+    // ============================================================================
+
+    ret = bthome_init();
+    if (ret != ESP_OK) {
+        ESP_LOGE(TAG, "BTHome parser initialization failed: %s", esp_err_to_name(ret));
+        ESP_LOGE(TAG, "CRITICAL ERROR - System halted");
+        relay_force_off();  // Safety first
+        while (1) {
+            vTaskDelay(pdMS_TO_TICKS(1000));
+        }
+    }
+
+    ESP_LOGI(TAG, "BTHome parser initialized");
+
+    // ============================================================================
+    // Initialize BLE scanner component
+    // ============================================================================
+
+    ret = ble_scanner_init();
+    if (ret != ESP_OK) {
+        ESP_LOGE(TAG, "BLE scanner initialization failed: %s", esp_err_to_name(ret));
+        ESP_LOGE(TAG, "CRITICAL ERROR - System halted");
+        relay_force_off();  // Safety first (already called in ble_scanner_init, but be explicit)
+        led_set_pattern(LED_ERROR, LED_PATTERN_ERROR_TRIPLE);  // Triple blink error pattern (FR4)
+        while (1) {
+            vTaskDelay(pdMS_TO_TICKS(1000));
+        }
+    }
+
+    ESP_LOGI(TAG, "BLE scanner initialized");
+
+    ESP_LOGI(TAG, "============================================");
     ESP_LOGI(TAG, "Firmware initialized successfully");
+    ESP_LOGI(TAG, "Hardware test commands available via serial");
+    ESP_LOGI(TAG, "Type HELP for available commands");
+    ESP_LOGI(TAG, "============================================");
 }
