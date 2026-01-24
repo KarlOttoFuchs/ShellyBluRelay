@@ -80,4 +80,24 @@ esp_err_t button_wait_for_press(uint32_t timeout_ms);
  */
 esp_err_t button_wait_for_release(uint32_t timeout_ms);
 
+/**
+ * Check for button long press (2 seconds)
+ *
+ * Non-blocking function that tracks button state across calls.
+ * Returns true ONCE when button is released after being held for 2+ seconds.
+ * Must be called repeatedly in main loop for accurate detection.
+ *
+ * @return true if long press detected (on release after 2s hold)
+ * @return false otherwise
+ */
+bool button_check_long_press(void);
+
+/**
+ * Reset long press detection state
+ *
+ * Resets internal tracking state. Call when entering a mode that
+ * should ignore any ongoing button press detection.
+ */
+void button_reset_long_press(void);
+
 #endif // BUTTON_INPUT_H

@@ -7,8 +7,14 @@
  */
 
 #include "bthome_parser.h"
+#include "sensor_button.h"
+#include "sensor_motion.h"
+#include "sensor_door.h"
+#include "led_control.h"
 #include "esp_log.h"
+#include "esp_timer.h"
 #include <string.h>
+#include <stdio.h>
 
 static const char *TAG = "bthome_parser";
 
@@ -25,6 +31,13 @@ static bthome_handler_entry_t handler_registry[MAX_HANDLERS];
 
 // Battery level tracking (RAM storage, not persisted)
 static uint8_t current_battery_pct = BATTERY_UNKNOWN;
+static uint32_t last_battery_update_ms = 0;
+
+// Track if error LED was set by battery handler (to avoid clearing other errors)
+static bool battery_error_led_active = false;
+
+// Learning mode callback (Story 3.2)
+static bthome_learning_callback_t learning_callback = NULL;
 
 // Forward declarations
 static uint8_t bthome_get_value_length(uint8_t object_id);
@@ -47,6 +60,30 @@ esp_err_t bthome_init(void)
         ESP_LOGE(TAG, "Failed to register battery handler");
         return ret;
     }
+
+    // Register button handler for Object ID 0x3A (Story 2.3)
+    ret = bthome_register_handler(0x3A, button_event_handler);
+    if (ret != ESP_OK) {
+        ESP_LOGE(TAG, "Failed to register button handler");
+        return ret;
+    }
+    ESP_LOGD(TAG, "Button handler registered for Object ID 0x3A");
+
+    // Register motion handler for Object ID 0x21 (Story 2.4)
+    ret = bthome_register_handler(0x21, motion_event_handler);
+    if (ret != ESP_OK) {
+        ESP_LOGE(TAG, "Failed to register motion handler");
+        return ret;
+    }
+    ESP_LOGD(TAG, "Motion handler registered for Object ID 0x21");
+
+    // Register door handler for Object ID 0x2D (Story 2.4)
+    ret = bthome_register_handler(0x2D, door_event_handler);
+    if (ret != ESP_OK) {
+        ESP_LOGE(TAG, "Failed to register door handler");
+        return ret;
+    }
+    ESP_LOGD(TAG, "Door handler registered for Object ID 0x2D");
 
     ESP_LOGI(TAG, "BTHome parser initialized");
     return ESP_OK;
@@ -96,6 +133,7 @@ static bthome_handler_t bthome_find_handler(uint8_t object_id)
  * Get BTHome Object ID value length (per BTHome v2 spec)
  *
  * Returns the number of value bytes for each Object ID type.
+ * See: https://bthome.io/format/
  *
  * @param object_id  BTHome Object ID
  * @return Value length in bytes, or 0 if unknown
@@ -103,23 +141,83 @@ static bthome_handler_t bthome_find_handler(uint8_t object_id)
 static uint8_t bthome_get_value_length(uint8_t object_id)
 {
     switch (object_id) {
-        // Sensor measurements (1 byte values)
-        case 0x00:  // Packet ID (counter) → 1 byte (uint8)
-        case 0x01:  // Battery %          → 1 byte (uint8)
-        case 0x21:  // Motion              → 1 byte (uint8, 0x00/0x01)
-        case 0x2D:  // Opening             → 1 byte (uint8, 0x00/0x01)
-        case 0x3A:  // Button              → 1 byte (uint8, event type: 0x01=press, 0x02=double, 0x03=triple, 0x04=long)
+        // 1-byte values (uint8 or boolean)
+        case 0x00:  // Packet ID (counter)
+        case 0x01:  // Battery %
+        case 0x10:  // Power (on/off)
+        case 0x11:  // Opening (bool) - alternate
+        case 0x12:  // CO2 (bool)
+        case 0x13:  // Cold (bool)
+        case 0x14:  // Connectivity (bool)
+        case 0x15:  // Door (bool)
+        case 0x16:  // Garage door (bool)
+        case 0x17:  // Gas (bool)
+        case 0x18:  // Generic boolean
+        case 0x19:  // Heat (bool)
+        case 0x1A:  // Light (bool)
+        case 0x1B:  // Lock (bool)
+        case 0x1C:  // Moisture (bool)
+        case 0x1D:  // Motion (bool) - alternate
+        case 0x1E:  // Moving (bool)
+        case 0x1F:  // Occupancy (bool)
+        case 0x20:  // Plug (bool)
+        case 0x21:  // Motion (bool) - presence
+        case 0x22:  // Presence (bool)
+        case 0x23:  // Problem (bool)
+        case 0x24:  // Running (bool)
+        case 0x25:  // Safety (bool)
+        case 0x26:  // Smoke (bool)
+        case 0x27:  // Sound (bool)
+        case 0x28:  // Tamper (bool)
+        case 0x29:  // Vibration (bool)
+        case 0x2A:  // Window (bool)
+        case 0x2D:  // Opening (bool) - door/window sensor
+        case 0x2E:  // Battery (bool) - low battery indicator
+        case 0x2F:  // Battery charging (bool)
+        case 0x3A:  // Button event
+        case 0x3C:  // Dimmer event
+        case 0x3E:  // Timestamp (uint48) - actually 4 bytes in some implementations
             return 1;
 
-        // Temperature, humidity (2 byte values - future extension)
-        case 0x02:  // Temperature         → 2 bytes (sint16, 0.01°C)
-        case 0x03:  // Humidity            → 2 bytes (uint16, 0.01%)
+        // Rotation/angle sensors (sint16 = 2 bytes)
+        case 0x3F:  // Rotation (sint16, 0.1°) - Shelly Door/Window tilt angle
             return 2;
 
-        // Unknown Object IDs
+        // 2-byte values (uint16 or sint16)
+        case 0x02:  // Temperature (sint16, 0.01°C)
+        case 0x03:  // Humidity (uint16, 0.01%)
+        case 0x04:  // Pressure (uint16, 0.01 hPa) - NOTE: spec says 3 bytes but some use 2
+        case 0x06:  // Mass kg (uint16, 0.01 kg)
+        case 0x07:  // Mass lb (uint16, 0.01 lb)
+        case 0x08:  // Dewpoint (sint16, 0.01°C)
+        case 0x09:  // Count (uint16)
+        case 0x0A:  // Energy (uint16, 0.001 kWh) - NOTE: spec says 3 bytes
+        case 0x0B:  // Power (uint16, 0.01 W) - NOTE: spec says 3 bytes
+        case 0x0C:  // Voltage (uint16, 0.001 V)
+        case 0x0D:  // PM2.5 (uint16)
+        case 0x0E:  // PM10 (uint16)
+        case 0x40:  // Distance mm (uint16)
+        case 0x41:  // Distance m (uint16, 0.1 m)
+        case 0x43:  // Current (uint16, 0.001 A)
+        case 0x4A:  // Voltage (uint16, 0.1 V)
+        case 0x4D:  // Count (uint16)
+            return 2;
+
+        // 3-byte values (uint24)
+        case 0x05:  // Illuminance (uint24, 0.01 lux)
+        case 0x0F:  // CO2 (uint24)
+            return 3;
+
+        // 4-byte values (uint32 or sint32)
+        case 0x42:  // Duration (uint24) - 3 bytes per spec
+        case 0x4B:  // Gas (uint24, 0.001 m³)
+        case 0x4C:  // Gas (uint32, 0.001 m³)
+            return 4;
+
+        // Unknown Object IDs - log and return 0 to stop parsing
         default:
-            ESP_LOGD(TAG, "Unknown Object ID 0x%02X", object_id);
-            return 0;  // Signal to skip this object
+            ESP_LOGW(TAG, "Unknown Object ID 0x%02X - cannot determine length, stopping parse", object_id);
+            return 0;
     }
 }
 
@@ -127,7 +225,7 @@ static uint8_t bthome_get_value_length(uint8_t object_id)
  * Internal handler for Object ID 0x01 (Battery %)
  *
  * Extracts battery level and stores in global state.
- * Logs warnings for low battery thresholds (<20%, <10%).
+ * Monitors battery thresholds and sets LED error patterns (Story 2.4, AC9).
  */
 static void battery_handler(const char *mac, uint8_t object_id,
                              const uint8_t *value, size_t value_len,
@@ -138,18 +236,30 @@ static void battery_handler(const char *mac, uint8_t object_id,
         return;
     }
 
-    current_battery_pct = value[0];  // 0-100%
-    ESP_LOGI(TAG, "Battery: %d%% (MAC: %s, RSSI: %d dBm)",
-             current_battery_pct, mac, rssi);
+    uint8_t battery_pct = value[0];  // 0-100%
 
-    // Battery warning thresholds (per FR11)
-    if (current_battery_pct < 20) {
-        ESP_LOGW(TAG, "Battery low: %d%%", current_battery_pct);
-        // TODO: Set warning LED pattern (single blink per FR4) when LED component integrated
-    }
-    if (current_battery_pct < 10) {
-        ESP_LOGE(TAG, "Battery critical: %d%%", current_battery_pct);
-        // TODO: Set error LED pattern when LED component integrated
+    // Store battery level in global state (RAM only, not persisted)
+    current_battery_pct = battery_pct;
+    last_battery_update_ms = esp_timer_get_time() / 1000;  // Convert µs to ms
+
+    // Battery threshold checks (FR11 / AC9)
+    if (battery_pct < 10) {
+        ESP_LOGE(TAG, "Battery CRITICAL: %d%% (MAC: %s)", battery_pct, mac);
+        led_set_pattern(LED_ERROR, LED_PATTERN_ERROR_SINGLE);  // Single blink (FR4)
+        battery_error_led_active = true;
+    } else if (battery_pct < 20) {
+        ESP_LOGW(TAG, "Battery LOW: %d%% (MAC: %s)", battery_pct, mac);
+        led_set_pattern(LED_ERROR, LED_PATTERN_ERROR_SINGLE);  // Single blink (FR4)
+        battery_error_led_active = true;
+    } else {
+        // Battery OK - log at DEBUG level only
+        ESP_LOGD(TAG, "Battery: %d%% (MAC: %s, RSSI: %d dBm)",
+                 battery_pct, mac, rssi);
+        // Only clear error LED if it was set by battery handler (don't override other errors)
+        if (battery_error_led_active) {
+            led_set_pattern(LED_ERROR, LED_PATTERN_OFF);
+            battery_error_led_active = false;
+        }
     }
 }
 
@@ -209,7 +319,7 @@ esp_err_t bthome_parse_packet(const char *mac, const uint8_t *adv_data,
 
     if (service_data == NULL) {
         // Not a BTHome packet (debug level - not an error)
-        ESP_LOGD(TAG, "No BTHome service data found (MAC: %s)", mac);
+        ESP_LOGD(TAG, "No BTHome service data in packet (MAC: %s)", mac);
         return ESP_ERR_NOT_FOUND;
     }
 
@@ -250,7 +360,7 @@ esp_err_t bthome_parse_packet(const char *mac, const uint8_t *adv_data,
     bool trigger = (device_info & 0x04) != 0;
     (void)trigger;  // Will be used in future stories for relay logic
 
-    ESP_LOGD(TAG, "BTHome v2 packet from %s (trigger=%d)", mac, trigger);
+    ESP_LOGD(TAG, "BTHome v2 packet from %s (trigger=%d, data_len=%d)", mac, trigger, service_data_len);
 
     // Iterate through OLV triplets starting at byte 1
     // Format: [Object ID] [Value bytes...] (length implicit from Object ID)
@@ -278,16 +388,56 @@ esp_err_t bthome_parse_packet(const char *mac, const uint8_t *adv_data,
         if (handler) {
             handler(mac, object_id, value, value_len, rssi);
         } else {
-            // Log value even without handler (for debugging)
-            if (value_len == 1) {
-                ESP_LOGD(TAG, "No handler for Object ID 0x%02X, value=0x%02X", object_id, value[0]);
-            } else if (value_len == 2) {
-                ESP_LOGD(TAG, "No handler for Object ID 0x%02X, value=0x%02X%02X", object_id, value[0], value[1]);
-            } else {
-                ESP_LOGD(TAG, "No handler for Object ID 0x%02X, len=%d", object_id, value_len);
-            }
+            // Log unhandled Object IDs at DEBUG level
+            ESP_LOGD(TAG, "No handler for Object ID 0x%02X (value=0x%02X)", object_id, value[0]);
         }
     }
 
     return ESP_OK;
+}
+
+/**
+ * Set learning mode callback (Story 3.2)
+ */
+void bthome_set_learning_callback(bthome_learning_callback_t callback)
+{
+    learning_callback = callback;
+    ESP_LOGI(TAG, "Learning callback %s", callback ? "registered" : "cleared");
+}
+
+/**
+ * Get current learning mode callback
+ */
+bthome_learning_callback_t bthome_get_learning_callback(void)
+{
+    return learning_callback;
+}
+
+/**
+ * Convert MAC string to 6-byte array
+ *
+ * @param mac_str MAC address string (format: "AA:BB:CC:DD:EE:FF")
+ * @param mac_out 6-byte output array
+ * @return true on success, false on parse error
+ */
+bool bthome_mac_str_to_bytes(const char *mac_str, uint8_t *mac_out)
+{
+    if (mac_str == NULL || mac_out == NULL) {
+        return false;
+    }
+
+    unsigned int bytes[6];
+    int parsed = sscanf(mac_str, "%02X:%02X:%02X:%02X:%02X:%02X",
+                        &bytes[0], &bytes[1], &bytes[2],
+                        &bytes[3], &bytes[4], &bytes[5]);
+
+    if (parsed != 6) {
+        return false;
+    }
+
+    for (int i = 0; i < 6; i++) {
+        mac_out[i] = (uint8_t)bytes[i];
+    }
+
+    return true;
 }

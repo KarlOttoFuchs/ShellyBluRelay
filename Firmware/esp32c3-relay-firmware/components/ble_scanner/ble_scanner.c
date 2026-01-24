@@ -11,6 +11,8 @@
 #include "relay_control.h"
 #include "led_control.h"
 #include "bthome_parser.h"
+#include "nvs_storage.h"
+#include "state_machine.h"
 
 #include "esp_log.h"
 #include "esp_timer.h"
@@ -29,6 +31,11 @@ static const char *TAG = "ble_scanner";
 static ble_tracked_device_t tracked_devices[BLE_MAX_TRACKED_DEVICES];
 static SemaphoreHandle_t tracked_devices_mutex = NULL;
 static bool initialized = false;
+
+// MAC filtering cache (Story 2.4 - performance optimization)
+// Caches registered sensor MAC to avoid NVS reads on every packet
+static char cached_registered_mac[18] = {0};
+static bool mac_cache_valid = false;
 
 // BLE scan parameters (per architecture.md)
 static struct ble_gap_disc_params disc_params = {
@@ -136,10 +143,56 @@ static int ble_gap_event(struct ble_gap_event *event, void *arg)
             // Log at DEBUG level to avoid spam (AC3)
             ESP_LOGD(TAG, "BLE: %s RSSI:%d len:%d", mac_str, rssi, adv_len);
 
-            // Store in tracking structure
+            // Store in tracking structure (all sensors visible in BLE_SCAN per AC8)
             ble_scanner_add_device(mac_str, rssi);
 
-            // Parse BTHome v2 packets (Story 2.2)
+            // Learning mode bypass (Story 3.2): Process ALL BTHome packets when learning
+            bool in_learning_mode = (state_get_current() == STATE_LEARNING);
+
+            if (in_learning_mode) {
+                // Learning mode: process all BTHome packets to capture any sensor
+                ESP_LOGD(TAG, "Learning mode: processing packet from %s", mac_str);
+                bthome_parse_packet(mac_str, event->disc.data, adv_len, rssi);
+                break;
+            }
+
+            // MAC filtering for BTHome packet processing (Story 2.4, AC7)
+            // Use cached MAC to avoid NVS reads on every packet (performance fix)
+            if (!mac_cache_valid) {
+                // Cache miss - load from NVS (only happens once after boot or refresh)
+                esp_err_t ret = nvs_get_registered_sensor_mac(cached_registered_mac, sizeof(cached_registered_mac));
+                if (ret == ESP_OK) {
+                    mac_cache_valid = true;
+                    ESP_LOGI(TAG, "MAC filter cache loaded: %s", cached_registered_mac);
+                } else if (ret == ESP_ERR_NVS_NOT_FOUND) {
+                    // No sensor registered - clear cache and skip processing
+                    cached_registered_mac[0] = '\0';
+                    mac_cache_valid = true;  // Cache the "no sensor" state too
+                    ESP_LOGD(TAG, "No sensor registered (cached)");
+                } else {
+                    // NVS error - skip processing, relay stays OFF (safety)
+                    ESP_LOGE(TAG, "NVS read failed: %s", esp_err_to_name(ret));
+                    break;
+                }
+            }
+
+            // Check if any sensor is registered
+            if (cached_registered_mac[0] == '\0') {
+                // No sensor registered - skip all event processing
+                ESP_LOGD(TAG, "No sensor registered, packet ignored");
+                break;
+            }
+
+            // Compare packet MAC with cached registered MAC
+            if (strcmp(mac_str, cached_registered_mac) != 0) {
+                // MAC does not match - log and ignore
+                ESP_LOGD(TAG, "Packet from unregistered sensor: %s (registered: %s)",
+                         mac_str, cached_registered_mac);
+                break;
+            }
+
+            // 3. MAC matches - proceed with BTHome parsing and handler dispatch
+            ESP_LOGI(TAG, "Packet from registered sensor: %s", mac_str);
             bthome_parse_packet(mac_str, event->disc.data, adv_len, rssi);
         }
         break;
@@ -211,18 +264,8 @@ esp_err_t ble_scanner_init(void)
         return ESP_ERR_NO_MEM;
     }
 
-    // Initialize NVS (required by NimBLE)
-    ret = nvs_flash_init();
-    if (ret == ESP_ERR_NVS_NO_FREE_PAGES || ret == ESP_ERR_NVS_NEW_VERSION_FOUND) {
-        ESP_ERROR_CHECK(nvs_flash_erase());
-        ret = nvs_flash_init();
-    }
-    if (ret != ESP_OK) {
-        ESP_LOGE(TAG, "NVS init failed: %s", esp_err_to_name(ret));
-        relay_force_off();
-        led_set_pattern(LED_ERROR, LED_PATTERN_ERROR_TRIPLE);
-        return ret;
-    }
+    // Note: NVS is already initialized by nvs_storage_init() in main.c
+    // Do NOT call nvs_flash_init() here to avoid double-init and potential data loss
 
     // Initialize NimBLE controller and host
     ret = nimble_port_init();
@@ -286,4 +329,14 @@ esp_err_t ble_scanner_get_devices(ble_tracked_device_t *devices, uint32_t max_de
     xSemaphoreGive(tracked_devices_mutex);
 
     return ESP_OK;
+}
+
+/**
+ * Invalidate MAC filter cache
+ * Forces reload from NVS on next packet (Story 2.4)
+ */
+void ble_scanner_invalidate_mac_cache(void)
+{
+    mac_cache_valid = false;
+    ESP_LOGD(TAG, "MAC filter cache invalidated");
 }

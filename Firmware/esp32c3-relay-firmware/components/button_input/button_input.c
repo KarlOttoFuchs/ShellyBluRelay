@@ -19,6 +19,7 @@
 #include "relay_control.h"
 #include "driver/gpio.h"
 #include "esp_log.h"
+#include "esp_timer.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
 
@@ -33,8 +34,15 @@ static const char *TAG = "BUTTON_INPUT";
 // Polling interval for wait functions
 #define POLL_INTERVAL_MS  10
 
+// Long press detection threshold (2 seconds per AC1)
+#define BUTTON_LONG_PRESS_MS  2000
+
 // Track initialization state
 static bool button_initialized = false;
+
+// Long press detection state
+static uint32_t button_press_start_ms = 0;
+static bool button_was_pressed = false;
 
 /**
  * Read raw button state (no debouncing)
@@ -199,4 +207,50 @@ esp_err_t button_wait_for_release(uint32_t timeout_ms)
 
     ESP_LOGW(TAG, "Button release wait timeout (%lums)", (unsigned long)timeout_ms);
     return ESP_ERR_TIMEOUT;
+}
+
+/**
+ * Check for button long press (2 seconds)
+ *
+ * Non-blocking function that tracks button state across calls.
+ * Returns true ONCE when button is released after being held for 2+ seconds.
+ */
+bool button_check_long_press(void)
+{
+    if (!button_initialized) {
+        return false;
+    }
+
+    // Read raw button state (active LOW)
+    bool currently_pressed = (gpio_get_level(BUTTON_GPIO_PIN) == 0);
+    uint32_t now_ms = (uint32_t)(esp_timer_get_time() / 1000);
+
+    if (currently_pressed && !button_was_pressed) {
+        // Button just pressed - start timer
+        button_press_start_ms = now_ms;
+        button_was_pressed = true;
+        return false;
+    }
+
+    if (!currently_pressed && button_was_pressed) {
+        // Button just released - check duration
+        button_was_pressed = false;
+        uint32_t duration = now_ms - button_press_start_ms;
+
+        if (duration >= BUTTON_LONG_PRESS_MS) {
+            ESP_LOGI(TAG, "Long press detected (%lu ms)", (unsigned long)duration);
+            return true;
+        }
+    }
+
+    return false;
+}
+
+/**
+ * Reset long press detection state
+ */
+void button_reset_long_press(void)
+{
+    button_press_start_ms = 0;
+    button_was_pressed = false;
 }

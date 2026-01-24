@@ -52,4 +52,15 @@ esp_err_t ble_scanner_init(void);
  */
 esp_err_t ble_scanner_get_devices(ble_tracked_device_t *devices, uint32_t max_devices, uint32_t *count);
 
+/**
+ * Invalidate MAC filter cache
+ *
+ * Call this function after changing sensor registration (via nvs_set_registered_sensor_mac
+ * or nvs_clear_registered_sensor) to force the scanner to reload the registered MAC
+ * from NVS on the next packet.
+ *
+ * Story 2.4: Added for MAC filtering cache management.
+ */
+void ble_scanner_invalidate_mac_cache(void);
+
 #endif // BLE_SCANNER_H

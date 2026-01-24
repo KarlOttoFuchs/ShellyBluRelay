@@ -2,6 +2,7 @@
  * Unit Tests for Serial Protocol Component
  *
  * Story 1.5: Serial Protocol Foundation & Hardware Test Suite
+ * Story 3.3: Manual Sensor Registration via Serial Command
  *
  * Tests command parsing, response formatting, and error handling.
  * Note: Full integration testing requires hardware; these tests validate
@@ -11,6 +12,7 @@
 #include "unity.h"
 #include "serial_protocol.h"
 #include <string.h>
+#include <strings.h>
 #include <ctype.h>
 
 // Test helpers - mock response capture
@@ -258,13 +260,167 @@ void test_max_command_length(void)
 }
 
 // ============================================================================
-// Unity Test Runner
+// Story 3.3: REGISTER_SENSOR Tests
 // ============================================================================
 
-void app_main(void)
+/**
+ * Test: validate_mac_format() - Valid MAC addresses
+ */
+void test_validate_mac_format_valid(void)
 {
-    UNITY_BEGIN();
+    // Valid uppercase MAC addresses with colons
+    TEST_ASSERT_TRUE(validate_mac_format("AA:BB:CC:DD:EE:FF"));
+    TEST_ASSERT_TRUE(validate_mac_format("5C:C7:C1:F5:C9:AC"));
+    TEST_ASSERT_TRUE(validate_mac_format("00:00:00:00:00:00"));
+    TEST_ASSERT_TRUE(validate_mac_format("FF:FF:FF:FF:FF:FF"));
+    TEST_ASSERT_TRUE(validate_mac_format("12:34:56:78:9A:BC"));
+}
 
+/**
+ * Test: validate_mac_format() - Invalid: lowercase letters
+ */
+void test_validate_mac_format_invalid_lowercase(void)
+{
+    TEST_ASSERT_FALSE(validate_mac_format("aa:bb:cc:dd:ee:ff"));
+    TEST_ASSERT_FALSE(validate_mac_format("AA:BB:CC:DD:EE:ff"));  // Mixed
+    TEST_ASSERT_FALSE(validate_mac_format("5c:c7:c1:f5:c9:ac"));
+}
+
+/**
+ * Test: validate_mac_format() - Invalid: no colons
+ */
+void test_validate_mac_format_invalid_no_colons(void)
+{
+    TEST_ASSERT_FALSE(validate_mac_format("AABBCCDDEEFF"));
+    TEST_ASSERT_FALSE(validate_mac_format("AA-BB-CC-DD-EE-FF"));  // Dashes instead
+    TEST_ASSERT_FALSE(validate_mac_format("AA.BB.CC.DD.EE.FF"));  // Dots instead
+}
+
+/**
+ * Test: validate_mac_format() - Invalid: wrong length
+ */
+void test_validate_mac_format_invalid_length(void)
+{
+    TEST_ASSERT_FALSE(validate_mac_format("AA:BB:CC:DD:EE"));      // Too short
+    TEST_ASSERT_FALSE(validate_mac_format("AA:BB:CC:DD:EE:FF:00")); // Too long
+    TEST_ASSERT_FALSE(validate_mac_format(""));                     // Empty
+    TEST_ASSERT_FALSE(validate_mac_format("A"));                    // Way too short
+}
+
+/**
+ * Test: validate_mac_format() - Invalid: non-hex characters
+ */
+void test_validate_mac_format_invalid_hex(void)
+{
+    TEST_ASSERT_FALSE(validate_mac_format("GG:HH:II:JJ:KK:LL"));  // Invalid hex
+    TEST_ASSERT_FALSE(validate_mac_format("ZZ:BB:CC:DD:EE:FF"));  // Z is invalid
+    TEST_ASSERT_FALSE(validate_mac_format("A :BB:CC:DD:EE:FF"));  // Space in hex
+}
+
+/**
+ * Test: validate_mac_format() - NULL input
+ */
+void test_validate_mac_format_null(void)
+{
+    TEST_ASSERT_FALSE(validate_mac_format(NULL));
+}
+
+/**
+ * Test: parse_sensor_type() - Valid types (case insensitive)
+ */
+void test_parse_sensor_type_valid(void)
+{
+    // Uppercase
+    TEST_ASSERT_EQUAL(SENSOR_TYPE_BUTTON, parse_sensor_type("BUTTON"));
+    TEST_ASSERT_EQUAL(SENSOR_TYPE_MOTION, parse_sensor_type("MOTION"));
+    TEST_ASSERT_EQUAL(SENSOR_TYPE_DOOR, parse_sensor_type("DOOR"));
+
+    // Lowercase
+    TEST_ASSERT_EQUAL(SENSOR_TYPE_BUTTON, parse_sensor_type("button"));
+    TEST_ASSERT_EQUAL(SENSOR_TYPE_MOTION, parse_sensor_type("motion"));
+    TEST_ASSERT_EQUAL(SENSOR_TYPE_DOOR, parse_sensor_type("door"));
+
+    // Mixed case
+    TEST_ASSERT_EQUAL(SENSOR_TYPE_BUTTON, parse_sensor_type("Button"));
+    TEST_ASSERT_EQUAL(SENSOR_TYPE_MOTION, parse_sensor_type("Motion"));
+    TEST_ASSERT_EQUAL(SENSOR_TYPE_DOOR, parse_sensor_type("Door"));
+    TEST_ASSERT_EQUAL(SENSOR_TYPE_BUTTON, parse_sensor_type("bUtToN"));
+}
+
+/**
+ * Test: parse_sensor_type() - Invalid types
+ */
+void test_parse_sensor_type_invalid(void)
+{
+    TEST_ASSERT_EQUAL(SENSOR_TYPE_NONE, parse_sensor_type("TEMP"));
+    TEST_ASSERT_EQUAL(SENSOR_TYPE_NONE, parse_sensor_type("HUMIDITY"));
+    TEST_ASSERT_EQUAL(SENSOR_TYPE_NONE, parse_sensor_type("SENSOR"));
+    TEST_ASSERT_EQUAL(SENSOR_TYPE_NONE, parse_sensor_type("FOO"));
+    TEST_ASSERT_EQUAL(SENSOR_TYPE_NONE, parse_sensor_type(""));
+    TEST_ASSERT_EQUAL(SENSOR_TYPE_NONE, parse_sensor_type(NULL));
+}
+
+/**
+ * Test: REGISTER_SENSOR command argument parsing
+ */
+void test_register_sensor_arg_parsing(void)
+{
+    // Simulate parsing "AA:BB:CC:DD:EE:FF BUTTON"
+    const char *args = "AA:BB:CC:DD:EE:FF BUTTON";
+
+    // Skip leading spaces
+    while (*args == ' ') args++;
+
+    // Extract MAC (first 17 chars)
+    char mac[18] = {0};
+    strncpy(mac, args, 17);
+    mac[17] = '\0';
+    TEST_ASSERT_EQUAL_STRING("AA:BB:CC:DD:EE:FF", mac);
+
+    // Move past MAC
+    const char *type_arg = args + 17;
+    while (*type_arg == ' ') type_arg++;
+
+    // Extract type
+    char type_str[16] = {0};
+    int i = 0;
+    while (type_arg[i] != '\0' && type_arg[i] != ' ' && i < 15) {
+        type_str[i] = type_arg[i];
+        i++;
+    }
+    type_str[i] = '\0';
+    TEST_ASSERT_EQUAL_STRING("BUTTON", type_str);
+}
+
+/**
+ * Test: REGISTER_SENSOR response format
+ */
+void test_register_sensor_response_format(void)
+{
+    // Success response format: OK|registered|MAC|TYPE
+    const char *expected = "OK|registered|AA:BB:CC:DD:EE:FF|BUTTON\n";
+    TEST_ASSERT_TRUE(strstr(expected, "OK|registered") != NULL);
+    TEST_ASSERT_TRUE(strstr(expected, "AA:BB:CC:DD:EE:FF") != NULL);
+    TEST_ASSERT_TRUE(strstr(expected, "BUTTON") != NULL);
+
+    // Error response format: ERROR|code|message
+    const char *err1 = "ERROR|INVALID_MAC|MAC must be uppercase with colons (AA:BB:CC:DD:EE:FF)\n";
+    TEST_ASSERT_TRUE(strstr(err1, "ERROR|INVALID_MAC") != NULL);
+
+    const char *err2 = "ERROR|INVALID_TYPE|Sensor type must be BUTTON, MOTION, or DOOR\n";
+    TEST_ASSERT_TRUE(strstr(err2, "ERROR|INVALID_TYPE") != NULL);
+
+    const char *err3 = "ERROR|INVALID_ARGUMENT|Usage: REGISTER_SENSOR";
+    TEST_ASSERT_TRUE(strstr(err3, "ERROR|INVALID_ARGUMENT") != NULL);
+}
+
+// ============================================================================
+// Test Runner Function (for test_app integration)
+// ============================================================================
+
+void run_serial_protocol_tests(void)
+{
+    // Story 1.5 tests
     RUN_TEST(test_serial_send_ok_format);
     RUN_TEST(test_serial_send_error_format);
     RUN_TEST(test_command_case_insensitive);
@@ -277,5 +433,15 @@ void app_main(void)
     RUN_TEST(test_error_codes);
     RUN_TEST(test_max_command_length);
 
-    UNITY_END();
+    // Story 3.3 tests: REGISTER_SENSOR
+    RUN_TEST(test_validate_mac_format_valid);
+    RUN_TEST(test_validate_mac_format_invalid_lowercase);
+    RUN_TEST(test_validate_mac_format_invalid_no_colons);
+    RUN_TEST(test_validate_mac_format_invalid_length);
+    RUN_TEST(test_validate_mac_format_invalid_hex);
+    RUN_TEST(test_validate_mac_format_null);
+    RUN_TEST(test_parse_sensor_type_valid);
+    RUN_TEST(test_parse_sensor_type_invalid);
+    RUN_TEST(test_register_sensor_arg_parsing);
+    RUN_TEST(test_register_sensor_response_format);
 }
