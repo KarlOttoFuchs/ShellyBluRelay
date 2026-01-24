@@ -57,4 +57,60 @@ bool relay_get_state(void);
  */
 void relay_force_off(void);
 
+/**
+ * Activate relay on sensor trigger (Story 4A.1)
+ *
+ * Called by sensor handlers when a registered sensor event is detected.
+ * Performs state check, activates relay, transitions state, and sets LED.
+ *
+ * Actions performed:
+ * 1. Check if in LISTENING state (skip if not)
+ * 2. Capture timestamp for latency measurement
+ * 3. Call relay_set_state(true) to energize relay
+ * 4. Transition to STATE_ACTIVE
+ * 5. Set LED to solid ON pattern
+ * 6. Store last trigger timestamp for STATUS command
+ * 7. Log relay activation
+ *
+ * @param mac MAC address string of triggering sensor
+ * @param sensor_type Sensor type (BUTTON, MOTION, DOOR)
+ * @param event_name Human-readable event name for logging
+ * @return ESP_OK if relay activated
+ *         ESP_ERR_INVALID_STATE if not in LISTENING state
+ *         Other error codes on relay failure
+ */
+esp_err_t relay_activate_on_trigger(const char *mac, uint8_t sensor_type, const char *event_name);
+
+/**
+ * Get last trigger timestamp (Story 4A.1)
+ *
+ * Returns the uptime in milliseconds when the relay was last triggered
+ * by a sensor event. Used by STATUS command.
+ *
+ * @return Timestamp in milliseconds, or 0 if never triggered
+ */
+uint32_t relay_get_last_trigger_ms(void);
+
+/**
+ * Get last triggering sensor MAC address (Story 4A.1)
+ *
+ * Returns the MAC address of the sensor that last triggered the relay.
+ * Used by STATUS command.
+ *
+ * @param mac_out Buffer to store MAC string (at least 18 bytes)
+ * @param max_len Size of mac_out buffer
+ * @return ESP_OK if MAC copied, ESP_ERR_NOT_FOUND if never triggered
+ */
+esp_err_t relay_get_last_trigger_mac(char *mac_out, size_t max_len);
+
+/**
+ * Get last triggering sensor type (Story 4A.1)
+ *
+ * Returns the sensor type that last triggered the relay.
+ * Used by STATUS command.
+ *
+ * @return Sensor type (1=BUTTON, 2=MOTION, 3=DOOR), or 0 if never triggered
+ */
+uint8_t relay_get_last_trigger_sensor_type(void);
+
 #endif // RELAY_CONTROL_H

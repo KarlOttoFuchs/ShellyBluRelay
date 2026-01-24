@@ -2,6 +2,7 @@
  * Door Event Handler - BTHome Object ID 0x2D
  *
  * Story 2.4: Decode Motion & Door Events + Implement MAC Filtering
+ * Story 4A.1: Relay Activation on Registered Sensor Event
  *
  * Implements door/window opening event decoding from Shelly BLU Door/Window sensor.
  */
@@ -9,6 +10,7 @@
 #include "sensor_door.h"
 #include "sensor_button.h"  // For unified sensor_event_log()
 #include "bthome_parser.h"
+#include "relay_control.h"
 #include "esp_log.h"
 
 static const char *TAG = "sensor_door";
@@ -41,6 +43,12 @@ void door_event_handler(const char *mac, uint8_t object_id,
 
     // Log to unified event buffer for history tracking (Story 2.4)
     sensor_event_log(mac, SENSOR_TYPE_DOOR, event_value, battery_pct, rssi);
+
+    // Story 4A.1: Activate relay on door open (if in LISTENING state)
+    // Only activate on door_open (0x01), not door_closed (0x00)
+    if (event_value == DOOR_OPEN) {
+        relay_activate_on_trigger(mac, SENSOR_TYPE_DOOR, event_name);
+    }
 
     // Invoke learning mode callback if registered (Story 3.2)
     bthome_learning_callback_t callback = bthome_get_learning_callback();

@@ -11,6 +11,7 @@
 
 #include "serial_protocol.h"
 #include "relay_control.h"
+#include "relay_timer.h"
 #include "led_control.h"
 #include "button_input.h"
 #include "ble_scanner.h"
@@ -58,6 +59,7 @@ static esp_err_t cmd_test_load_config(const char *args);
 static esp_err_t cmd_help(const char *args);
 static esp_err_t cmd_register_sensor(const char *args);
 static esp_err_t cmd_clear_sensor(const char *args);
+static esp_err_t cmd_set_timer(const char *args);
 
 // Command handler function type
 typedef esp_err_t (*cmd_handler_fn)(const char *args);
@@ -84,6 +86,7 @@ static const serial_command_t commands[] = {
     {"TEST_LOAD_CONFIG", cmd_test_load_config, "TEST_LOAD_CONFIG - Load and display config with CRC validation"},
     {"REGISTER_SENSOR", cmd_register_sensor, "REGISTER_SENSOR <MAC> <TYPE> - Register sensor (e.g., REGISTER_SENSOR AA:BB:CC:DD:EE:FF BUTTON)"},
     {"CLEAR_SENSOR",   cmd_clear_sensor,   "CLEAR_SENSOR - Clear registered sensor configuration"},
+    {"SET_TIMER",      cmd_set_timer,      "SET_TIMER <1-600> - Set relay timer duration in seconds"},
     {"HELP",           cmd_help,           "HELP - Show available commands"},
     {NULL, NULL, NULL}  // Sentinel
 };
@@ -99,7 +102,7 @@ static void serial_write(const char *str, size_t len)
 
 void serial_send_ok(const char *data)
 {
-    char response[128];
+    char response[512];  // Increased for STATUS JSON responses
     int len = snprintf(response, sizeof(response), "OK|%s\n", data);
     serial_write(response, len);
 }
@@ -133,18 +136,21 @@ static esp_err_t cmd_ping(const char *args)
 }
 
 /**
- * STATUS command handler (Story 3.2, updated Story 3.4)
+ * STATUS command handler (Story 3.2, updated Story 3.4, Story 4A.1)
  * Returns system state, sensor config, and learning mode status
  * Response format: OK|{"state":"...","sensor_registered":bool,"sensor_mac":"...","sensor_type":"..."}
  *
  * When unconfigured (AC7):
  * {"state":"unconfigured","sensor_registered":false,"sensor_mac":"","sensor_type":""}
+ *
+ * When ACTIVE (Story 4A.1 AC8):
+ * {"state":"ACTIVE","relay":"on","timer_remaining":0,"sensor_mac":"...","sensor_type":"...","last_trigger_ms":...}
  */
 static esp_err_t cmd_status(const char *args)
 {
     (void)args;  // Unused
 
-    char response[256];
+    char response[384];  // Increased for ACTIVE state fields
     system_state_t state = state_get_current();
     const char *state_str = state_to_string(state);
 
@@ -172,16 +178,43 @@ static esp_err_t cmd_status(const char *args)
                      state_str,
                      (unsigned long)time_remaining);
         }
+    } else if (state == STATE_ACTIVE) {
+        // ACTIVE state (Story 4A.1 AC8, Story 4A.2 AC3): include relay state, timer remaining, last trigger info
+        bool relay_on = relay_get_state();
+        uint16_t timer_remaining = relay_timer_get_remaining_sec();
+        uint32_t last_trigger = relay_get_last_trigger_ms();
+        char trigger_mac[18] = {0};
+        relay_get_last_trigger_mac(trigger_mac, sizeof(trigger_mac));
+        uint8_t trigger_sensor_type = relay_get_last_trigger_sensor_type();
+
+        // Convert sensor type to string
+        const char *sensor_type_str = "UNKNOWN";
+        switch (trigger_sensor_type) {
+            case 1: sensor_type_str = "BUTTON"; break;
+            case 2: sensor_type_str = "MOTION"; break;
+            case 3: sensor_type_str = "DOOR"; break;
+        }
+
+        snprintf(response, sizeof(response),
+                 "{\"state\":\"%s\",\"relay\":\"%s\",\"timer_remaining\":%u,\"sensor_mac\":\"%s\",\"sensor_type\":\"%s\",\"last_trigger_ms\":%lu}",
+                 state_str,
+                 relay_on ? "on" : "off",
+                 timer_remaining,
+                 trigger_mac,
+                 sensor_type_str,
+                 (unsigned long)last_trigger);
     } else if (state == STATE_UNCONFIGURED || !has_config) {
         // Unconfigured state (AC7): sensor_registered=false, empty strings
         snprintf(response, sizeof(response),
                  "{\"state\":\"%s\",\"sensor_registered\":false,\"sensor_mac\":\"\",\"sensor_type\":\"\"}",
                  state_str);
     } else {
-        // Configured state (LISTENING or ACTIVE)
+        // Configured state (LISTENING) - Story 4A.2 AC7: include relay and timer_remaining
+        bool relay_on = relay_get_state();
         snprintf(response, sizeof(response),
-                 "{\"state\":\"%s\",\"sensor_registered\":true,\"sensor_mac\":\"%s\",\"sensor_type\":%d,\"timer_seconds\":%d,\"retrigger_mode\":%d}",
+                 "{\"state\":\"%s\",\"relay\":\"%s\",\"timer_remaining\":0,\"sensor_registered\":true,\"sensor_mac\":\"%s\",\"sensor_type\":%d,\"timer_seconds\":%d,\"retrigger_mode\":%d}",
                  state_str,
+                 relay_on ? "on" : "off",
                  config.sensor_mac,
                  config.sensor_type,
                  config.timer_seconds,
@@ -867,6 +900,96 @@ static esp_err_t cmd_clear_sensor(const char *args)
 
     ESP_LOGI(TAG, "Sensor configuration cleared");
     serial_send_ok("cleared");
+
+    return ESP_OK;
+}
+
+/**
+ * SET_TIMER command handler (Story 4A.3)
+ *
+ * Sets the relay timer duration via serial command.
+ * Usage: SET_TIMER <1-600>
+ *
+ * Validates the timer value (1-600 seconds per FR19), updates NVS config,
+ * and responds with success or appropriate error.
+ *
+ * Response formats:
+ *   OK|timer_set|60
+ *   ERROR|INVALID_FORMAT|Timer must be an integer
+ *   ERROR|INVALID_RANGE|Timer must be 1-600 seconds
+ *   ERROR|NVS_FAILURE|Failed to load/save config
+ */
+static esp_err_t cmd_set_timer(const char *args)
+{
+    // Check for missing argument (AC3: non-integer includes empty)
+    if (args == NULL || args[0] == '\0') {
+        serial_send_error("INVALID_FORMAT", "Timer must be an integer");
+        return ESP_ERR_INVALID_ARG;
+    }
+
+    // Skip leading whitespace
+    while (*args == ' ') args++;
+
+    if (*args == '\0') {
+        serial_send_error("INVALID_FORMAT", "Timer must be an integer");
+        return ESP_ERR_INVALID_ARG;
+    }
+
+    // Parse integer value using strtol for proper validation
+    char *endptr;
+    long value = strtol(args, &endptr, 10);
+
+    // Skip trailing whitespace before checking if string fully consumed
+    while (*endptr == ' ' || *endptr == '\r' || *endptr == '\n') {
+        endptr++;
+    }
+
+    // Check if entire string was consumed (valid integer) - AC3
+    if (*endptr != '\0') {
+        ESP_LOGW(TAG, "SET_TIMER: Invalid format: '%s'", args);
+        serial_send_error("INVALID_FORMAT", "Timer must be an integer");
+        return ESP_ERR_INVALID_ARG;
+    }
+
+    // Range check 1-600 seconds per FR19 - AC2
+    if (value < TIMER_SECONDS_MIN || value > TIMER_SECONDS_MAX) {
+        ESP_LOGW(TAG, "SET_TIMER: Out of range: %ld", value);
+        serial_send_error("INVALID_RANGE", "Timer must be 1-600 seconds");
+        return ESP_ERR_INVALID_ARG;
+    }
+
+    // Load existing config from NVS - AC4
+    sensor_config_t config;
+    esp_err_t err = nvs_load_config(&config);
+
+    if (err == ESP_ERR_NVS_NOT_FOUND) {
+        // No config exists yet - initialize with defaults
+        nvs_init_config_defaults(&config);
+    } else if (err != ESP_OK) {
+        // NVS error (could be CRC failure or other)
+        ESP_LOGE(TAG, "SET_TIMER: Failed to load config: %s", esp_err_to_name(err));
+        serial_send_error("NVS_FAILURE", "Failed to load config");
+        return err;
+    }
+
+    // Update timer field - AC4
+    config.timer_seconds = (uint16_t)value;
+
+    // Save config (CRC recalculated internally by nvs_save_config) - AC4
+    err = nvs_save_config(&config);
+    if (err != ESP_OK) {
+        ESP_LOGE(TAG, "SET_TIMER: Failed to save config: %s", esp_err_to_name(err));
+        serial_send_error("NVS_FAILURE", "Failed to save config");
+        return err;
+    }
+
+    // Log success - AC5
+    ESP_LOGI(TAG, "Timer set to %d seconds", (int)value);
+
+    // Send success response - AC5
+    char response[32];
+    snprintf(response, sizeof(response), "timer_set|%d", (int)value);
+    serial_send_ok(response);
 
     return ESP_OK;
 }

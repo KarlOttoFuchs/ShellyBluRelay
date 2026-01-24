@@ -779,8 +779,9 @@ relay-cli config import office-config.yaml
 5. **Priority #4**: CLI polish - Rich formatting, auto-detection, error handling, help text
 
 **Testing Strategy:**
-- **Hardware Validation**: Test every interface (LEDs, relay, button, BLE scanning, USB serial) with simple test firmware before architecture implementation
-- **Unit Testing**: BTHome parser unit tests with real packet captures from Shelly BLU devices
+- **Hardware Validation**: Test every interface (LEDs, relay, button, BLE scanning, USB serial) with test firmware before architecture implementation
+- **Firmware Validation**: Direct hardware testing of all functionality using serial commands and physical sensor triggers
+- **CLI Testing**: pytest unit tests for Python CLI tool (runs locally without hardware)
 - **Integration Testing**: End-to-end workflows matching user journeys (Marcus, Sofia, Priya scenarios)
 - **Error Recovery Testing**: NVS corruption, firmware crashes, multiple port detection, config validation failures
 - **Load Testing**: 24-hour continuous operation, 1000+ trigger cycles, sensor battery health monitoring

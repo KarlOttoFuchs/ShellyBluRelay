@@ -2,12 +2,14 @@
  * Button Event Handler - BTHome Object ID 0x3A
  *
  * Story 2.3: Decode Shelly BLU Button Events
+ * Story 4A.1: Relay Activation on Registered Sensor Event
  *
  * Implements button press event decoding from Shelly BLU Button sensor.
  */
 
 #include "sensor_button.h"
 #include "bthome_parser.h"
+#include "relay_control.h"
 #include "esp_log.h"
 #include "esp_timer.h"
 #include <string.h>
@@ -134,6 +136,12 @@ void button_event_handler(const char *mac, uint8_t object_id,
 
     // Log to event buffer for history tracking
     button_event_log(mac, event_value, battery_pct, rssi);
+
+    // Story 4A.1: Activate relay on sensor trigger (if in LISTENING state)
+    // Skip activation for NONE events (not a real trigger)
+    if (event_value != BUTTON_EVENT_NONE) {
+        relay_activate_on_trigger(mac, SENSOR_TYPE_BUTTON, event_name);
+    }
 
     // Invoke learning mode callback if registered (Story 3.2)
     bthome_learning_callback_t callback = bthome_get_learning_callback();

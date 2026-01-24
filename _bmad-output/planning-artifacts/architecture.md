@@ -204,9 +204,9 @@ cd relay-cli
   - `src/relay_cli/formatters.py` for Rich UI formatting (separation of concerns)
 
 **Testing Framework:**
-- **Firmware**: ESP-IDF Unity test framework (component-level unit tests)
-- **CLI**: pytest (Python standard, mature ecosystem)
-- **Integration**: End-to-end tests with mock serial devices
+- **Firmware**: Hardware validation via serial commands and physical sensor triggers (no unit tests - embedded code requires hardware execution)
+- **CLI**: pytest (Python standard, runs locally without hardware)
+- **Integration**: End-to-end testing with physical hardware
 
 **Development Experience:**
 - **Firmware**: ESP-IDF toolchain (`idf.py build`, `idf.py flash`, `idf.py monitor`)
@@ -941,10 +941,6 @@ firmware/
 │   └── serial_protocol/
 │       ├── serial_protocol.c/.h  # Command parser + response builder
 │       └── CMakeLists.txt
-├── test/
-│   ├── test_bthome_parser.c      # Unity tests for BTHome parser
-│   ├── test_nvs_storage.c        # Unity tests for NVS
-│   └── test_state_machine.c      # Unity tests for state machine
 ├── CMakeLists.txt
 ├── sdkconfig                     # ESP-IDF configuration
 └── README.md
@@ -980,14 +976,15 @@ relay-cli/
 ```
 
 **Test Organization:**
-- **Firmware**: Component-level unit tests in `test/` directory (Unity framework)
+- **Firmware**: Hardware validation via serial commands and physical sensor triggers (no unit test directory)
 - **CLI**: pytest tests in `tests/` mirroring `src/` structure
-- **Integration**: End-to-end tests with mock serial devices (future enhancement)
+- **Integration**: End-to-end testing with physical hardware
 
 **Rationale:**
-- ESP-IDF component architecture enables reusability and testing
+- ESP-IDF component architecture enables reusability
+- Firmware validation requires hardware execution - traditional unit tests don't apply
 - Python `src/` layout prevents import conflicts
-- Test structure mirrors source structure for discoverability
+- CLI test structure mirrors source structure for discoverability
 
 ### Format Patterns
 
@@ -1221,25 +1218,14 @@ logger.debug(f"Received response: {response}")
 
 **Testing Patterns:**
 
-**Firmware Testing (Unity):**
+**Firmware Validation (Hardware-Based):**
 
-```c
-// Test file naming: test_<component>.c
-// test/test_bthome_parser.c
+Firmware is validated through direct hardware testing:
+- Serial commands (`STATUS`, `TEST_RELAY`, etc.) verify functionality
+- Physical sensor triggers validate BLE parsing and event handling
+- Hardware observation confirms LED patterns and relay operation
 
-void test_parse_button_packet(void) {
-    uint8_t packet[] = {/* BTHome button packet */};
-    sensor_event_t event;
-
-    esp_err_t result = bthome_parse_packet(packet, sizeof(packet), &event);
-
-    TEST_ASSERT_EQUAL(ESP_OK, result);
-    TEST_ASSERT_EQUAL(SENSOR_BUTTON, event.sensor_type);
-    TEST_ASSERT_EQUAL(BUTTON_SINGLE_PRESS, event.event_data);
-}
-
-// Run tests: idf.py test
-```
+No unit test framework - embedded code requires hardware execution for meaningful validation.
 
 **CLI Testing (pytest):**
 
