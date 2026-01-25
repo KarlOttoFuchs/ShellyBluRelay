@@ -21,11 +21,15 @@
 #include "nvs_flash.h"  // For ESP_ERR_NVS_NOT_FOUND
 #include "state_machine.h"
 #include "learning_mode.h"
+#include "boot_reason.h"  // Story 4B.4: Boot reason tracking
+#include "error_log.h"  // Story 5.2: Error logging
+#include "firmware_version.h"  // Story 5.4: Firmware version
 
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
 #include "esp_log.h"
 #include "esp_timer.h"
+#include "esp_task_wdt.h"  // Story 4B.5: Watchdog timer
 #include "driver/usb_serial_jtag.h"
 #include "esp_vfs_usb_serial_jtag.h"
 #include "esp_vfs_dev.h"
@@ -52,6 +56,7 @@ static esp_err_t cmd_test_led(const char *args);
 static esp_err_t cmd_test_button(const char *args);
 static esp_err_t cmd_ble_scan(const char *args);
 static esp_err_t cmd_ble_events(const char *args);
+static esp_err_t cmd_get_errors(const char *args);
 static esp_err_t cmd_test_register(const char *args);
 static esp_err_t cmd_test_unregister(const char *args);
 static esp_err_t cmd_test_save_config(const char *args);
@@ -60,6 +65,8 @@ static esp_err_t cmd_help(const char *args);
 static esp_err_t cmd_register_sensor(const char *args);
 static esp_err_t cmd_clear_sensor(const char *args);
 static esp_err_t cmd_set_timer(const char *args);
+static esp_err_t cmd_set_retrigger(const char *args);
+static esp_err_t cmd_test_hang(const char *args);  // Story 4B.5: Watchdog test
 
 // Command handler function type
 typedef esp_err_t (*cmd_handler_fn)(const char *args);
@@ -80,6 +87,7 @@ static const serial_command_t commands[] = {
     {"TEST_BUTTON",    cmd_test_button,    "TEST_BUTTON - Read button state"},
     {"BLE_SCAN",       cmd_ble_scan,       "BLE_SCAN - Show recently seen BLE devices"},
     {"BLE_EVENTS",     cmd_ble_events,     "BLE_EVENTS - Show last 10 sensor events"},
+    {"GET_ERRORS",     cmd_get_errors,     "GET_ERRORS - Show last 10 system errors"},
     {"TEST_REGISTER",  cmd_test_register,  "TEST_REGISTER <MAC> - Register sensor MAC (e.g., AA:BB:CC:DD:EE:FF)"},
     {"TEST_UNREGISTER",cmd_test_unregister,"TEST_UNREGISTER - Clear registered sensor"},
     {"TEST_SAVE_CONFIG", cmd_test_save_config, "TEST_SAVE_CONFIG <MAC> [timer] - Save full config with CRC (Story 3.1)"},
@@ -87,6 +95,8 @@ static const serial_command_t commands[] = {
     {"REGISTER_SENSOR", cmd_register_sensor, "REGISTER_SENSOR <MAC> <TYPE> - Register sensor (e.g., REGISTER_SENSOR AA:BB:CC:DD:EE:FF BUTTON)"},
     {"CLEAR_SENSOR",   cmd_clear_sensor,   "CLEAR_SENSOR - Clear registered sensor configuration"},
     {"SET_TIMER",      cmd_set_timer,      "SET_TIMER <1-600> - Set relay timer duration in seconds"},
+    {"SET_RETRIGGER",  cmd_set_retrigger,  "SET_RETRIGGER [EXTEND|IGNORE] - Set timer retriggering mode"},
+    {"TEST_HANG",      cmd_test_hang,      "TEST_HANG - Test watchdog by hanging firmware (triggers reset)"},
     {"HELP",           cmd_help,           "HELP - Show available commands"},
     {NULL, NULL, NULL}  // Sentinel
 };
@@ -136,50 +146,103 @@ static esp_err_t cmd_ping(const char *args)
 }
 
 /**
- * STATUS command handler (Story 3.2, updated Story 3.4, Story 4A.1)
- * Returns system state, sensor config, and learning mode status
- * Response format: OK|{"state":"...","sensor_registered":bool,"sensor_mac":"...","sensor_type":"..."}
+ * Helper: Build error summary string for STATUS command (Story 5.3)
+ *
+ * Formats: "errors":{"count":N,"last_error":"CODE|message"}
+ * or      "errors":{"count":0,"last_error":null}
+ *
+ * @param buffer      Output buffer
+ * @param buffer_size Size of output buffer
+ */
+static void build_error_summary(char *buffer, size_t buffer_size)
+{
+    int error_count = error_log_get_count();
+
+    if (error_count == 0) {
+        snprintf(buffer, buffer_size, "\"errors\":{\"count\":0,\"last_error\":null}");
+        return;
+    }
+
+    // Get last error
+    error_record_t last_error;
+    if (error_log_get_last(&last_error)) {
+        // Escape any quotes in error message for JSON safety
+        char safe_msg[64];
+        strncpy(safe_msg, last_error.message, sizeof(safe_msg) - 1);
+        safe_msg[sizeof(safe_msg) - 1] = '\0';
+
+        snprintf(buffer, buffer_size,
+                 "\"errors\":{\"count\":%d,\"last_error\":\"%s|%s\"}",
+                 error_count,
+                 error_code_to_string(last_error.error_code),
+                 safe_msg);
+    } else {
+        // Shouldn't happen, but handle gracefully
+        snprintf(buffer, buffer_size, "\"errors\":{\"count\":%d,\"last_error\":null}", error_count);
+    }
+}
+
+/**
+ * STATUS command handler (Story 3.2, updated Story 3.4, Story 4A.1, Story 4B.4, Story 5.3, Story 5.4)
+ * Returns system state, sensor config, learning mode status, and boot reason
+ * Response format: OK|{"state":"...","boot_reason":"...","sensor_registered":bool,...}
+ *
+ * Story 4B.4 AC3: All responses include "boot_reason" field
  *
  * When unconfigured (AC7):
- * {"state":"unconfigured","sensor_registered":false,"sensor_mac":"","sensor_type":""}
+ * {"state":"unconfigured","boot_reason":"POWER_ON","sensor_registered":false,"sensor_mac":"","sensor_type":""}
  *
  * When ACTIVE (Story 4A.1 AC8):
- * {"state":"ACTIVE","relay":"on","timer_remaining":0,"sensor_mac":"...","sensor_type":"...","last_trigger_ms":...}
+ * {"state":"ACTIVE","boot_reason":"POWER_ON","relay":"on","timer_remaining":0,"sensor_mac":"...","sensor_type":"...","last_trigger_ms":...}
  */
 static esp_err_t cmd_status(const char *args)
 {
     (void)args;  // Unused
 
-    char response[384];  // Increased for ACTIVE state fields
+    char response[640];  // Story 5.3/5.4: Increased for firmware + error fields
+    char error_summary[128];  // Buffer for error summary
     system_state_t state = state_get_current();
     const char *state_str = state_to_string(state);
+    const char *boot_reason = get_boot_reason_string();  // Story 4B.4
+
+    // Build error summary once (used in all response branches) - Story 5.3
+    build_error_summary(error_summary, sizeof(error_summary));
+
+    // Get firmware version - Story 5.4
+    const char *fw_version = get_firmware_version();
 
     // Load config if available
     sensor_config_t config;
     esp_err_t config_ret = nvs_load_config(&config);
     bool has_config = (config_ret == ESP_OK);
 
-    // Build JSON response
+    // Build JSON response - all responses include boot_reason (Story 4B.4 AC3)
     if (state == STATE_LEARNING) {
         // Learning mode: include time remaining
         uint32_t time_remaining = learning_mode_time_remaining_sec();
 
         if (has_config) {
             snprintf(response, sizeof(response),
-                     "{\"state\":\"%s\",\"time_remaining_sec\":%lu,\"sensor_registered\":true,\"sensor_mac\":\"%s\",\"sensor_type\":%d,\"timer_seconds\":%d}",
+                     "{\"state\":\"%s\",\"boot_reason\":\"%s\",\"time_remaining_sec\":%lu,\"sensor_registered\":true,\"sensor_mac\":\"%s\",\"sensor_type\":%d,\"timer_seconds\":%d,\"firmware\":{\"version\":\"%s\"},%s}",
                      state_str,
+                     boot_reason,
                      (unsigned long)time_remaining,
                      config.sensor_mac,
                      config.sensor_type,
-                     config.timer_seconds);
+                     config.timer_seconds,
+                     fw_version,
+                     error_summary);
         } else {
             snprintf(response, sizeof(response),
-                     "{\"state\":\"%s\",\"time_remaining_sec\":%lu,\"sensor_registered\":false,\"sensor_mac\":\"\",\"sensor_type\":\"\"}",
+                     "{\"state\":\"%s\",\"boot_reason\":\"%s\",\"time_remaining_sec\":%lu,\"sensor_registered\":false,\"sensor_mac\":\"\",\"sensor_type\":\"\",\"firmware\":{\"version\":\"%s\"},%s}",
                      state_str,
-                     (unsigned long)time_remaining);
+                     boot_reason,
+                     (unsigned long)time_remaining,
+                     fw_version,
+                     error_summary);
         }
     } else if (state == STATE_ACTIVE) {
-        // ACTIVE state (Story 4A.1 AC8, Story 4A.2 AC3): include relay state, timer remaining, last trigger info
+        // ACTIVE state (Story 4A.1 AC8, Story 4A.2 AC3, Story 4A.4): include relay state, timer remaining, last trigger info, retrigger mode
         bool relay_on = relay_get_state();
         uint16_t timer_remaining = relay_timer_get_remaining_sec();
         uint32_t last_trigger = relay_get_last_trigger_ms();
@@ -195,34 +258,50 @@ static esp_err_t cmd_status(const char *args)
             case 3: sensor_type_str = "DOOR"; break;
         }
 
+        // Get retrigger_mode from config (Story 4A.4)
+        int retrigger_mode = 0;  // Default EXTEND
+        if (has_config) {
+            retrigger_mode = config.retrigger_mode;
+        }
+
         snprintf(response, sizeof(response),
-                 "{\"state\":\"%s\",\"relay\":\"%s\",\"timer_remaining\":%u,\"sensor_mac\":\"%s\",\"sensor_type\":\"%s\",\"last_trigger_ms\":%lu}",
+                 "{\"state\":\"%s\",\"boot_reason\":\"%s\",\"relay\":\"%s\",\"timer_remaining\":%u,\"sensor_mac\":\"%s\",\"sensor_type\":\"%s\",\"last_trigger_ms\":%lu,\"retrigger_mode\":%d,\"firmware\":{\"version\":\"%s\"},%s}",
                  state_str,
+                 boot_reason,
                  relay_on ? "on" : "off",
                  timer_remaining,
                  trigger_mac,
                  sensor_type_str,
-                 (unsigned long)last_trigger);
+                 (unsigned long)last_trigger,
+                 retrigger_mode,
+                 fw_version,
+                 error_summary);
     } else if (state == STATE_UNCONFIGURED || !has_config) {
         // Unconfigured state (AC7): sensor_registered=false, empty strings
         snprintf(response, sizeof(response),
-                 "{\"state\":\"%s\",\"sensor_registered\":false,\"sensor_mac\":\"\",\"sensor_type\":\"\"}",
-                 state_str);
+                 "{\"state\":\"%s\",\"boot_reason\":\"%s\",\"sensor_registered\":false,\"sensor_mac\":\"\",\"sensor_type\":\"\",\"firmware\":{\"version\":\"%s\"},%s}",
+                 state_str,
+                 boot_reason,
+                 fw_version,
+                 error_summary);
     } else {
         // Configured state (LISTENING) - Story 4A.2 AC7: include relay and timer_remaining
         bool relay_on = relay_get_state();
         snprintf(response, sizeof(response),
-                 "{\"state\":\"%s\",\"relay\":\"%s\",\"timer_remaining\":0,\"sensor_registered\":true,\"sensor_mac\":\"%s\",\"sensor_type\":%d,\"timer_seconds\":%d,\"retrigger_mode\":%d}",
+                 "{\"state\":\"%s\",\"boot_reason\":\"%s\",\"relay\":\"%s\",\"timer_remaining\":0,\"sensor_registered\":true,\"sensor_mac\":\"%s\",\"sensor_type\":%d,\"timer_seconds\":%d,\"retrigger_mode\":%d,\"firmware\":{\"version\":\"%s\"},%s}",
                  state_str,
+                 boot_reason,
                  relay_on ? "on" : "off",
                  config.sensor_mac,
                  config.sensor_type,
                  config.timer_seconds,
-                 config.retrigger_mode);
+                 config.retrigger_mode,
+                 fw_version,
+                 error_summary);
     }
 
     serial_send_ok(response);
-    ESP_LOGI(TAG, "STATUS: state=%s", state_str);
+    ESP_LOGI(TAG, "STATUS: state=%s, boot_reason=%s", state_str, boot_reason);
     return ESP_OK;
 }
 
@@ -461,6 +540,44 @@ static esp_err_t cmd_ble_events(const char *args)
     }
 
     ESP_LOGI(TAG, "BLE_EVENTS: returned %d events", count);
+    return ESP_OK;
+}
+
+/**
+ * GET_ERRORS command handler (Story 5.2)
+ * Returns last 10 errors from error log (newest first)
+ *
+ * Response format per Story 5.2 AC4:
+ *   OK|errors|N\n
+ *   [timestamp_ms] CODE=[NVS_CRC_FAIL] MSG=[Config corrupted, CRC mismatch]\n
+ *   ...
+ */
+static esp_err_t cmd_get_errors(const char *args)
+{
+    (void)args;  // Unused
+
+    error_record_t errors[10];
+    int count = error_log_get_history(errors, 10);
+
+    // Send response header: OK|errors|N
+    char header[32];
+    int len = snprintf(header, sizeof(header), "OK|errors|%d\r\n", count);
+    serial_write(header, len);
+
+    // Send each error
+    for (int i = 0; i < count; i++) {
+        const error_record_t *err = &errors[i];
+
+        char line[128];
+        len = snprintf(line, sizeof(line),
+                      "[%lu] CODE=[%s] MSG=[%s]\r\n",
+                      (unsigned long)err->timestamp_ms,
+                      error_code_to_string(err->error_code),
+                      err->message);
+        serial_write(line, len);
+    }
+
+    ESP_LOGI(TAG, "GET_ERRORS: returned %d errors", count);
     return ESP_OK;
 }
 
@@ -995,6 +1112,95 @@ static esp_err_t cmd_set_timer(const char *args)
 }
 
 /**
+ * SET_RETRIGGER command handler (Story 4A.4)
+ *
+ * Sets the relay timer retriggering mode via serial command.
+ * Usage: SET_RETRIGGER [EXTEND|IGNORE]
+ *
+ * EXTEND: New sensor trigger resets timer countdown
+ * IGNORE: New triggers ignored while relay is active
+ *
+ * Response formats:
+ *   OK|retrigger_set|EXTEND
+ *   OK|retrigger_set|IGNORE
+ *   ERROR|INVALID_MODE|Retrigger mode must be EXTEND or IGNORE
+ *   ERROR|NVS_FAILURE|Failed to load/save config
+ */
+static esp_err_t cmd_set_retrigger(const char *args)
+{
+    // Check for missing argument
+    if (args == NULL || args[0] == '\0') {
+        serial_send_error("INVALID_MODE", "Retrigger mode must be EXTEND or IGNORE");
+        return ESP_ERR_INVALID_ARG;
+    }
+
+    // Skip leading whitespace
+    while (*args == ' ') args++;
+
+    if (*args == '\0') {
+        serial_send_error("INVALID_MODE", "Retrigger mode must be EXTEND or IGNORE");
+        return ESP_ERR_INVALID_ARG;
+    }
+
+    // Extract mode argument (until space, newline, or end)
+    char mode_str[16] = {0};
+    int i = 0;
+    while (args[i] != '\0' && args[i] != ' ' &&
+           args[i] != '\n' && args[i] != '\r' && i < 15) {
+        mode_str[i] = args[i];
+        i++;
+    }
+    mode_str[i] = '\0';
+
+    // Parse mode (case-insensitive)
+    retrigger_mode_t mode;
+    if (strcasecmp(mode_str, "EXTEND") == 0) {
+        mode = RETRIGGER_EXTEND;
+    } else if (strcasecmp(mode_str, "IGNORE") == 0) {
+        mode = RETRIGGER_IGNORE;
+    } else {
+        ESP_LOGW(TAG, "SET_RETRIGGER: Invalid mode: '%s'", mode_str);
+        serial_send_error("INVALID_MODE", "Retrigger mode must be EXTEND or IGNORE");
+        return ESP_ERR_INVALID_ARG;
+    }
+
+    // Load existing config from NVS
+    sensor_config_t config;
+    esp_err_t err = nvs_load_config(&config);
+
+    if (err == ESP_ERR_NVS_NOT_FOUND) {
+        // No config exists yet - initialize with defaults
+        nvs_init_config_defaults(&config);
+    } else if (err != ESP_OK) {
+        ESP_LOGE(TAG, "SET_RETRIGGER: Failed to load config: %s", esp_err_to_name(err));
+        serial_send_error("NVS_FAILURE", "Failed to load config");
+        return err;
+    }
+
+    // Update retrigger_mode field
+    config.retrigger_mode = mode;
+
+    // Save config (CRC recalculated internally)
+    err = nvs_save_config(&config);
+    if (err != ESP_OK) {
+        ESP_LOGE(TAG, "SET_RETRIGGER: Failed to save config: %s", esp_err_to_name(err));
+        serial_send_error("NVS_FAILURE", "Failed to save config");
+        return err;
+    }
+
+    // Log success
+    const char *mode_name = (mode == RETRIGGER_EXTEND) ? "EXTEND" : "IGNORE";
+    ESP_LOGI(TAG, "Retrigger mode set to %s", mode_name);
+
+    // Send success response
+    char response[32];
+    snprintf(response, sizeof(response), "retrigger_set|%s", mode_name);
+    serial_send_ok(response);
+
+    return ESP_OK;
+}
+
+/**
  * HELP command handler
  * Lists all available commands with descriptions
  */
@@ -1012,6 +1218,28 @@ static esp_err_t cmd_help(const char *args)
     }
 
     ESP_LOGI(TAG, "HELP command executed");
+    return ESP_OK;
+}
+
+/**
+ * TEST_HANG command handler (Story 4B.5 AC4)
+ * Tests watchdog timer by hanging the firmware in an infinite loop.
+ * Watchdog should trigger reset within 10 seconds.
+ */
+static esp_err_t cmd_test_hang(const char *args)
+{
+    (void)args;  // Unused
+
+    serial_send_ok("hanging_firmware");
+    ESP_LOGW(TAG, "TEST_HANG: Entering infinite loop - watchdog should trigger reset in 10s");
+
+    // Infinite loop without calling esp_task_wdt_reset()
+    // Watchdog timer should trigger panic and reset within 10 seconds
+    while (1) {
+        vTaskDelay(pdMS_TO_TICKS(100));
+    }
+
+    // Never reached
     return ESP_OK;
 }
 
@@ -1088,7 +1316,18 @@ static void serial_protocol_task(void *pvParameters)
 
     ESP_LOGI(TAG, "Serial protocol task started - waiting for commands");
 
+    // Story 4B.5: Subscribe this task to TWDT monitoring
+    esp_err_t wdt_ret = esp_task_wdt_add(NULL);
+    if (wdt_ret == ESP_OK) {
+        ESP_LOGI(TAG, "Serial protocol task subscribed to watchdog");
+    } else {
+        ESP_LOGW(TAG, "Failed to subscribe serial task to watchdog: %s", esp_err_to_name(wdt_ret));
+    }
+
     while (1) {
+        // Story 4B.5: Reset watchdog timer to signal normal operation
+        esp_task_wdt_reset();
+
         // Read one byte at a time from USB Serial JTAG with timeout
         int len = usb_serial_jtag_read_bytes(&byte, 1, pdMS_TO_TICKS(100));
 

@@ -138,18 +138,56 @@ bool relay_get_state(void)
 }
 
 /**
- * Activate relay on sensor trigger (Story 4A.1)
+ * Activate relay on sensor trigger (Story 4A.1, 4A.4)
  *
  * Called by sensor handlers when a registered sensor event is detected.
  * Performs state check, activates relay, transitions state, and sets LED.
+ *
+ * Story 4A.4 Retriggering:
+ * - If relay already active (STATE_ACTIVE), behavior depends on retrigger_mode:
+ *   - EXTEND: Reset timer to full duration
+ *   - IGNORE: Log and ignore trigger
  */
 esp_err_t relay_activate_on_trigger(const char *mac, uint8_t sensor_type, const char *event_name)
 {
     // Capture timestamp at entry for latency measurement (NFP1)
     int64_t entry_time_us = esp_timer_get_time();
 
-    // Check if we're in LISTENING state - only activate from LISTENING
+    // Load config for timer and retrigger settings
+    sensor_config_t config;
+    uint16_t timer_seconds = RELAY_TIMER_DEFAULT_SECONDS;
+    uint8_t retrigger_mode = RETRIGGER_EXTEND;  // Default to EXTEND
+    esp_err_t config_ret = nvs_load_config(&config);
+    if (config_ret == ESP_OK) {
+        timer_seconds = config.timer_seconds;
+        retrigger_mode = config.retrigger_mode;
+    }
+
+    // Check current state
     system_state_t current_state = state_get_current();
+
+    // Story 4A.4: Handle retriggering when relay is already active
+    if (current_state == STATE_ACTIVE) {
+        // Log the sensor trigger event
+        ESP_LOGI(TAG, "Sensor triggered: %s (%s)", mac, event_name);
+
+        if (retrigger_mode == RETRIGGER_EXTEND) {
+            // EXTEND mode: Reset timer to full duration
+            esp_err_t timer_ret = relay_timer_start(timer_seconds);
+            if (timer_ret == ESP_OK) {
+                ESP_LOGI(TAG, "Timer extended (reset to %u seconds)", timer_seconds);
+            } else {
+                ESP_LOGW(TAG, "Failed to extend timer: %s", esp_err_to_name(timer_ret));
+            }
+            return ESP_OK;
+        } else {
+            // IGNORE mode: Do nothing, timer continues
+            ESP_LOGI(TAG, "Retrigger ignored (relay already active)");
+            return ESP_OK;
+        }
+    }
+
+    // Only activate from LISTENING state
     if (current_state != STATE_LISTENING) {
         ESP_LOGD(TAG, "Ignoring trigger - not in LISTENING state (current: %s)",
                  state_to_string(current_state));
@@ -196,15 +234,7 @@ esp_err_t relay_activate_on_trigger(const char *mac, uint8_t sensor_type, const 
     }
 
     // Story 4A.2: Start auto-deactivate timer (AC1, AC2)
-    // Load timer duration from NVS config, default to 10 seconds
-    uint16_t timer_seconds = RELAY_TIMER_DEFAULT_SECONDS;
-    sensor_config_t config;
-    if (nvs_load_config(&config) == ESP_OK) {
-        timer_seconds = config.timer_seconds;
-        ESP_LOGD(TAG, "Using configured timer: %u seconds", timer_seconds);
-    } else {
-        ESP_LOGD(TAG, "Using default timer: %u seconds", timer_seconds);
-    }
+    ESP_LOGD(TAG, "Using configured timer: %u seconds", timer_seconds);
 
     esp_err_t timer_ret = relay_timer_start(timer_seconds);
     if (timer_ret != ESP_OK) {

@@ -10,6 +10,8 @@
  * Story 2.2: Implement BTHome v2 Parser with Handler Registry
  * Story 3.1: NVS Storage Component with CRC Validation
  * Story 3.2: Implement 30-Second Learning Mode
+ * Story 4B.4: Boot Reason Tracking
+ * Story 4B.5: Watchdog Timer Implementation
  */
 
 #include <stdio.h>
@@ -17,6 +19,7 @@
 #include "freertos/task.h"
 #include "driver/gpio.h"
 #include "esp_log.h"
+#include "esp_task_wdt.h"  // Story 4B.5: Watchdog timer
 #include "gpio_config.h"
 #include "relay_control.h"
 #include "button_input.h"
@@ -28,6 +31,9 @@
 #include "nvs_flash.h"  // For ESP_ERR_NVS_NOT_FOUND
 #include "state_machine.h"
 #include "learning_mode.h"
+#include "boot_reason.h"  // Story 4B.4: Boot reason tracking
+#include "error_log.h"  // Story 5.2: Error logging
+#include "firmware_version.h"  // Story 5.4: Firmware version
 
 static const char *TAG = "MAIN";
 
@@ -35,7 +41,21 @@ static const char *TAG = "MAIN";
 static void main_loop_task(void *pvParameters);
 
 void app_main(void) {
+    // ============================================================================
+    // Story 4B.4: Initialize boot reason tracking IMMEDIATELY at startup (AC1, AC2)
+    // This must happen before any other logging to capture the true reset reason
+    // ============================================================================
+    boot_reason_init();
+
+    // ============================================================================
+    // Story 5.2: Initialize error log component
+    // ============================================================================
+    error_log_init();
+
     ESP_LOGI(TAG, "ESP32-C3 Relay Module - Starting initialization");
+
+    // Story 5.4 AC3: Log firmware version at startup
+    ESP_LOGI(TAG, "Firmware version: %s", get_firmware_version());
 
     // ============================================================================
     // CRITICAL: Initialize relay FIRST to ensure fail-safe OFF state (NFR1)
@@ -182,6 +202,7 @@ void app_main(void) {
     ret = ble_scanner_init();
     if (ret != ESP_OK) {
         ESP_LOGE(TAG, "BLE scanner initialization failed: %s", esp_err_to_name(ret));
+        error_log_add(ERROR_CODE_BLE_INIT_FAIL, "BLE stack initialization failed");  // Story 5.2
         ESP_LOGE(TAG, "CRITICAL ERROR - System halted");
         relay_force_off();  // Safety first (already called in ble_scanner_init, but be explicit)
         led_set_pattern(LED_ERROR, LED_PATTERN_ERROR_TRIPLE);  // Triple blink error pattern (FR4)
@@ -206,6 +227,24 @@ void app_main(void) {
     bthome_set_learning_callback(register_captured_sensor);
 
     ESP_LOGI(TAG, "Learning mode initialized");
+
+    // ============================================================================
+    // Story 4B.5: Configure Task Watchdog Timer (TWDT) - 10 second timeout (AC1)
+    // ============================================================================
+
+    esp_task_wdt_config_t twdt_config = {
+        .timeout_ms = 10000,        // 10 seconds per NFR2
+        .idle_core_mask = 0,        // Don't monitor idle tasks
+        .trigger_panic = true,      // Reset on timeout (AC4)
+    };
+
+    ret = esp_task_wdt_reconfigure(&twdt_config);
+    if (ret != ESP_OK) {
+        ESP_LOGE(TAG, "TWDT reconfigure failed: %s", esp_err_to_name(ret));
+        ESP_LOGW(TAG, "Watchdog timer not configured - system may not recover from hangs");
+    } else {
+        ESP_LOGI(TAG, "Watchdog timer configured (10s timeout)");
+    }
 
     // ============================================================================
     // Start main loop task for button monitoring and learning mode processing
@@ -238,12 +277,21 @@ void app_main(void) {
  *
  * Story 3.2: Checks for button long-press to enter learning mode,
  * and processes captured sensors when in learning mode.
+ * Story 4B.5: Feeds watchdog timer to prevent system reset (AC2, AC3)
  */
 static void main_loop_task(void *pvParameters)
 {
     (void)pvParameters;
 
     ESP_LOGI(TAG, "Main loop task started");
+
+    // Story 4B.5 AC2: Subscribe this task to TWDT monitoring
+    esp_err_t wdt_ret = esp_task_wdt_add(NULL);
+    if (wdt_ret == ESP_OK) {
+        ESP_LOGI(TAG, "Main loop subscribed to watchdog");
+    } else {
+        ESP_LOGW(TAG, "Failed to subscribe to watchdog: %s", esp_err_to_name(wdt_ret));
+    }
 
     while (1) {
         // Check for button long-press to enter learning mode
@@ -256,6 +304,9 @@ static void main_loop_task(void *pvParameters)
 
         // Process any captured sensor during learning mode
         learning_mode_process_capture();
+
+        // Story 4B.5 AC3: Reset watchdog timer to signal normal operation
+        esp_task_wdt_reset();
 
         // Short delay to prevent busy-loop
         vTaskDelay(pdMS_TO_TICKS(10));

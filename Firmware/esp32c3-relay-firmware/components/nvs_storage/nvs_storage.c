@@ -13,6 +13,7 @@
 #include "esp_rom_crc.h"
 #include "relay_control.h"
 #include "led_control.h"
+#include "error_log.h"  // Story 5.2: Error logging
 #include <string.h>
 
 static const char *TAG = "nvs_storage";
@@ -459,6 +460,7 @@ esp_err_t nvs_load_config(sensor_config_t *config)
     }
     if (ret != ESP_OK) {
         ESP_LOGE(TAG, "Failed to read sensor_mac: %s", esp_err_to_name(ret));
+        error_log_add(ERROR_CODE_NVS_READ_FAIL, "Failed to read sensor_mac from NVS");  // Story 5.2
         nvs_close(handle);
         return ESP_FAIL;
     }
@@ -510,6 +512,9 @@ esp_err_t nvs_load_config(sensor_config_t *config)
 
         ESP_LOGE(TAG, "NVS corruption detected: CRC mismatch (stored=0x%08lx, calc=0x%08lx)",
                  (unsigned long)config->config_crc, (unsigned long)expected_crc);
+
+        // Story 5.2: Log error to error buffer
+        error_log_add(ERROR_CODE_NVS_CRC_FAIL, "Config corrupted, CRC mismatch");
 
         // Set error LED double blink pattern (per FR4)
         led_set_pattern(LED_ERROR, LED_PATTERN_ERROR_DOUBLE);
