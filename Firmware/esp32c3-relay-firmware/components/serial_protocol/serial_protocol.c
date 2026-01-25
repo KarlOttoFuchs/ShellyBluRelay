@@ -51,22 +51,15 @@ static TaskHandle_t serial_task_handle = NULL;
 // Forward declarations for command handlers
 static esp_err_t cmd_ping(const char *args);
 static esp_err_t cmd_status(const char *args);
-static esp_err_t cmd_test_relay(const char *args);
-static esp_err_t cmd_test_led(const char *args);
-static esp_err_t cmd_test_button(const char *args);
+static esp_err_t cmd_relay(const char *args);
 static esp_err_t cmd_ble_scan(const char *args);
 static esp_err_t cmd_ble_events(const char *args);
 static esp_err_t cmd_get_errors(const char *args);
-static esp_err_t cmd_test_register(const char *args);
-static esp_err_t cmd_test_unregister(const char *args);
-static esp_err_t cmd_test_save_config(const char *args);
-static esp_err_t cmd_test_load_config(const char *args);
 static esp_err_t cmd_help(const char *args);
 static esp_err_t cmd_register_sensor(const char *args);
 static esp_err_t cmd_clear_sensor(const char *args);
 static esp_err_t cmd_set_timer(const char *args);
 static esp_err_t cmd_set_retrigger(const char *args);
-static esp_err_t cmd_test_hang(const char *args);  // Story 4B.5: Watchdog test
 
 // Command handler function type
 typedef esp_err_t (*cmd_handler_fn)(const char *args);
@@ -82,21 +75,14 @@ typedef struct {
 static const serial_command_t commands[] = {
     {"PING",           cmd_ping,           "PING - Test connectivity (responds: pong)"},
     {"STATUS",         cmd_status,         "STATUS - Show system state, config, and learning mode info"},
-    {"TEST_RELAY",     cmd_test_relay,     "TEST_RELAY [ON|OFF] - Control relay"},
-    {"TEST_LED",       cmd_test_led,       "TEST_LED [STATUS|ERROR] [ON|OFF|BLINK] - Control LEDs"},
-    {"TEST_BUTTON",    cmd_test_button,    "TEST_BUTTON - Read button state"},
+    {"RELAY",          cmd_relay,          "RELAY [ON|OFF] - Manually control relay"},
     {"BLE_SCAN",       cmd_ble_scan,       "BLE_SCAN - Show recently seen BLE devices"},
     {"BLE_EVENTS",     cmd_ble_events,     "BLE_EVENTS - Show last 10 sensor events"},
     {"GET_ERRORS",     cmd_get_errors,     "GET_ERRORS - Show last 10 system errors"},
-    {"TEST_REGISTER",  cmd_test_register,  "TEST_REGISTER <MAC> - Register sensor MAC (e.g., AA:BB:CC:DD:EE:FF)"},
-    {"TEST_UNREGISTER",cmd_test_unregister,"TEST_UNREGISTER - Clear registered sensor"},
-    {"TEST_SAVE_CONFIG", cmd_test_save_config, "TEST_SAVE_CONFIG <MAC> [timer] - Save full config with CRC (Story 3.1)"},
-    {"TEST_LOAD_CONFIG", cmd_test_load_config, "TEST_LOAD_CONFIG - Load and display config with CRC validation"},
     {"REGISTER_SENSOR", cmd_register_sensor, "REGISTER_SENSOR <MAC> <TYPE> - Register sensor (e.g., REGISTER_SENSOR AA:BB:CC:DD:EE:FF BUTTON)"},
     {"CLEAR_SENSOR",   cmd_clear_sensor,   "CLEAR_SENSOR - Clear registered sensor configuration"},
     {"SET_TIMER",      cmd_set_timer,      "SET_TIMER <1-600> - Set relay timer duration in seconds"},
     {"SET_RETRIGGER",  cmd_set_retrigger,  "SET_RETRIGGER [EXTEND|IGNORE] - Set timer retriggering mode"},
-    {"TEST_HANG",      cmd_test_hang,      "TEST_HANG - Test watchdog by hanging firmware (triggers reset)"},
     {"HELP",           cmd_help,           "HELP - Show available commands"},
     {NULL, NULL, NULL}  // Sentinel
 };
@@ -306,16 +292,17 @@ static esp_err_t cmd_status(const char *args)
 }
 
 /**
- * TEST_RELAY command handler
- * Controls relay state: TEST_RELAY ON or TEST_RELAY OFF
+ * RELAY command handler
+ * Manually controls relay state: RELAY ON or RELAY OFF
+ * Fulfills FR32: Users can test relay manually via CLI
  */
-static esp_err_t cmd_test_relay(const char *args)
+static esp_err_t cmd_relay(const char *args)
 {
     char state_arg[16] = {0};
 
     // Parse argument
     if (args == NULL || args[0] == '\0') {
-        serial_send_error("invalid_argument", "Usage: TEST_RELAY [ON|OFF]");
+        serial_send_error("invalid_argument", "Usage: RELAY [ON|OFF]");
         return ESP_ERR_INVALID_ARG;
     }
 
@@ -335,7 +322,7 @@ static esp_err_t cmd_test_relay(const char *args)
         esp_err_t ret = relay_set_state(true);
         if (ret == ESP_OK) {
             serial_send_ok("relay_on");
-            ESP_LOGI(TAG, "TEST_RELAY ON executed");
+            ESP_LOGI(TAG, "RELAY ON executed");
         } else {
             serial_send_error("relay_error", "Failed to set relay ON");
             return ret;
@@ -344,7 +331,7 @@ static esp_err_t cmd_test_relay(const char *args)
         esp_err_t ret = relay_set_state(false);
         if (ret == ESP_OK) {
             serial_send_ok("relay_off");
-            ESP_LOGI(TAG, "TEST_RELAY OFF executed");
+            ESP_LOGI(TAG, "RELAY OFF executed");
         } else {
             serial_send_error("relay_error", "Failed to set relay OFF");
             return ret;
@@ -352,93 +339,6 @@ static esp_err_t cmd_test_relay(const char *args)
     } else {
         serial_send_error("invalid_argument", "Relay state must be ON or OFF");
         return ESP_ERR_INVALID_ARG;
-    }
-
-    return ESP_OK;
-}
-
-/**
- * TEST_LED command handler
- * Controls LED state: TEST_LED [STATUS|ERROR] [ON|OFF|BLINK]
- */
-static esp_err_t cmd_test_led(const char *args)
-{
-    char led_arg[16] = {0};
-    char state_arg[16] = {0};
-
-    // Parse arguments
-    if (args == NULL || sscanf(args, "%15s %15s", led_arg, state_arg) != 2) {
-        serial_send_error("invalid_argument", "Usage: TEST_LED [STATUS|ERROR] [ON|OFF|BLINK]");
-        return ESP_ERR_INVALID_ARG;
-    }
-
-    // Convert to uppercase
-    for (char *p = led_arg; *p; p++) {
-        *p = toupper((unsigned char)*p);
-    }
-    for (char *p = state_arg; *p; p++) {
-        *p = toupper((unsigned char)*p);
-    }
-
-    // Determine LED
-    led_id_t led;
-    if (strcmp(led_arg, "STATUS") == 0) {
-        led = LED_STATUS;
-    } else if (strcmp(led_arg, "ERROR") == 0) {
-        led = LED_ERROR;
-    } else {
-        serial_send_error("invalid_argument", "LED must be STATUS or ERROR");
-        return ESP_ERR_INVALID_ARG;
-    }
-
-    // Determine state/pattern and execute
-    esp_err_t ret;
-    if (strcmp(state_arg, "ON") == 0) {
-        ret = led_set_state(led, true);
-        if (ret == ESP_OK) {
-            serial_send_ok("led_on");
-            ESP_LOGI(TAG, "TEST_LED %s ON executed", led_arg);
-        }
-    } else if (strcmp(state_arg, "OFF") == 0) {
-        ret = led_set_state(led, false);
-        if (ret == ESP_OK) {
-            serial_send_ok("led_off");
-            ESP_LOGI(TAG, "TEST_LED %s OFF executed", led_arg);
-        }
-    } else if (strcmp(state_arg, "BLINK") == 0) {
-        ret = led_set_pattern(led, LED_PATTERN_BLINK_SLOW);
-        if (ret == ESP_OK) {
-            serial_send_ok("led_blinking");
-            ESP_LOGI(TAG, "TEST_LED %s BLINK executed", led_arg);
-        }
-    } else {
-        serial_send_error("invalid_argument", "State must be ON, OFF, or BLINK");
-        return ESP_ERR_INVALID_ARG;
-    }
-
-    if (ret != ESP_OK) {
-        serial_send_error("led_error", "Failed to set LED state");
-        return ret;
-    }
-
-    return ESP_OK;
-}
-
-/**
- * TEST_BUTTON command handler
- * Reads and reports button state
- */
-static esp_err_t cmd_test_button(const char *args)
-{
-    (void)args;  // Unused
-
-    bool pressed = button_is_pressed();
-    if (pressed) {
-        serial_send_ok("button_state|pressed");
-        ESP_LOGI(TAG, "TEST_BUTTON: pressed");
-    } else {
-        serial_send_ok("button_state|released");
-        ESP_LOGI(TAG, "TEST_BUTTON: released");
     }
 
     return ESP_OK;
@@ -578,200 +478,6 @@ static esp_err_t cmd_get_errors(const char *args)
     }
 
     ESP_LOGI(TAG, "GET_ERRORS: returned %d errors", count);
-    return ESP_OK;
-}
-
-/**
- * TEST_REGISTER command handler
- * Registers a sensor MAC for event filtering
- * Usage: TEST_REGISTER AA:BB:CC:DD:EE:FF
- */
-static esp_err_t cmd_test_register(const char *args)
-{
-    if (args == NULL || args[0] == '\0') {
-        serial_send_error("invalid_argument", "Usage: TEST_REGISTER <MAC> (e.g., AA:BB:CC:DD:EE:FF)");
-        return ESP_ERR_INVALID_ARG;
-    }
-
-    // Copy and trim the MAC argument
-    char mac[32] = {0};
-    strncpy(mac, args, sizeof(mac) - 1);
-
-    // Trim trailing whitespace
-    size_t len = strlen(mac);
-    while (len > 0 && isspace((unsigned char)mac[len - 1])) {
-        mac[--len] = '\0';
-    }
-
-    // Convert to uppercase
-    for (char *p = mac; *p; p++) {
-        *p = toupper((unsigned char)*p);
-    }
-
-    // Attempt to register
-    esp_err_t ret = nvs_set_registered_sensor_mac(mac);
-    if (ret != ESP_OK) {
-        if (ret == ESP_ERR_INVALID_ARG) {
-            serial_send_error("invalid_mac", "MAC format must be AA:BB:CC:DD:EE:FF");
-        } else {
-            serial_send_error("nvs_error", "Failed to save MAC to NVS");
-        }
-        return ret;
-    }
-
-    // Invalidate MAC cache so BLE scanner picks up the new registration
-    ble_scanner_invalidate_mac_cache();
-
-    // Send success response
-    char response[64];
-    snprintf(response, sizeof(response), "registered|%s", mac);
-    serial_send_ok(response);
-    ESP_LOGI(TAG, "TEST_REGISTER: Sensor registered: %s", mac);
-
-    return ESP_OK;
-}
-
-/**
- * TEST_UNREGISTER command handler
- * Clears the registered sensor MAC
- */
-static esp_err_t cmd_test_unregister(const char *args)
-{
-    (void)args;  // Unused
-
-    // Check if a sensor is registered
-    if (!nvs_is_sensor_registered()) {
-        serial_send_error("not_registered", "No sensor is currently registered");
-        return ESP_ERR_NOT_FOUND;
-    }
-
-    // Clear registration
-    esp_err_t ret = nvs_clear_registered_sensor();
-    if (ret != ESP_OK) {
-        serial_send_error("nvs_error", "Failed to clear sensor from NVS");
-        return ret;
-    }
-
-    // Invalidate MAC cache
-    ble_scanner_invalidate_mac_cache();
-
-    serial_send_ok("unregistered");
-    ESP_LOGI(TAG, "TEST_UNREGISTER: Sensor cleared");
-
-    return ESP_OK;
-}
-
-/**
- * TEST_SAVE_CONFIG command handler (Story 3.1)
- * Saves a full sensor config with CRC validation
- * Usage: TEST_SAVE_CONFIG AA:BB:CC:DD:EE:FF [timer_seconds]
- * Default timer: 30 seconds
- */
-static esp_err_t cmd_test_save_config(const char *args)
-{
-    if (args == NULL || args[0] == '\0') {
-        serial_send_error("invalid_argument", "Usage: TEST_SAVE_CONFIG <MAC> [timer] (e.g., AA:BB:CC:DD:EE:FF 45)");
-        return ESP_ERR_INVALID_ARG;
-    }
-
-    char mac[32] = {0};
-    int timer = DEFAULT_TIMER_SECONDS;
-
-    // Parse MAC and optional timer
-    int parsed = sscanf(args, "%31s %d", mac, &timer);
-    if (parsed < 1) {
-        serial_send_error("invalid_argument", "Could not parse MAC address");
-        return ESP_ERR_INVALID_ARG;
-    }
-
-    // Convert MAC to uppercase
-    for (char *p = mac; *p; p++) {
-        *p = toupper((unsigned char)*p);
-    }
-
-    // Validate timer range
-    if (timer < TIMER_SECONDS_MIN || timer > TIMER_SECONDS_MAX) {
-        char err_msg[64];
-        snprintf(err_msg, sizeof(err_msg), "Timer must be %d-%d seconds", TIMER_SECONDS_MIN, TIMER_SECONDS_MAX);
-        serial_send_error("invalid_argument", err_msg);
-        return ESP_ERR_INVALID_ARG;
-    }
-
-    // Build config struct
-    sensor_config_t config;
-    nvs_init_config_defaults(&config);
-    strncpy(config.sensor_mac, mac, sizeof(config.sensor_mac) - 1);
-    config.sensor_type = NVS_SENSOR_TYPE_BUTTON;  // Default to button
-    config.timer_seconds = (uint16_t)timer;
-    config.retrigger_mode = RETRIGGER_EXTEND;
-    config.config_version = CONFIG_VERSION;
-
-    // Save config (CRC calculated internally)
-    esp_err_t ret = nvs_save_config(&config);
-    if (ret != ESP_OK) {
-        if (ret == ESP_ERR_INVALID_ARG) {
-            serial_send_error("invalid_config", "Config validation failed (check MAC format)");
-        } else {
-            serial_send_error("nvs_error", "Failed to save config to NVS");
-        }
-        return ret;
-    }
-
-    // Invalidate MAC cache so BLE scanner picks up the new config
-    ble_scanner_invalidate_mac_cache();
-
-    // Calculate CRC for response
-    uint32_t crc = nvs_calculate_config_crc(&config);
-
-    // Send success response with CRC
-    char response[128];
-    snprintf(response, sizeof(response), "config_saved|MAC=%s|timer=%d|CRC=0x%08lX",
-             config.sensor_mac, config.timer_seconds, (unsigned long)crc);
-    serial_send_ok(response);
-    ESP_LOGI(TAG, "TEST_SAVE_CONFIG: Config saved with CRC 0x%08lX", (unsigned long)crc);
-
-    return ESP_OK;
-}
-
-/**
- * TEST_LOAD_CONFIG command handler (Story 3.1)
- * Loads and displays the current config with CRC validation
- */
-static esp_err_t cmd_test_load_config(const char *args)
-{
-    (void)args;  // Unused
-
-    sensor_config_t config;
-    esp_err_t ret = nvs_load_config(&config);
-
-    if (ret == ESP_ERR_NVS_NOT_FOUND) {
-        serial_send_error("not_found", "No config stored in NVS");
-        return ret;
-    }
-
-    if (ret == ESP_ERR_INVALID_CRC) {
-        serial_send_error("crc_error", "Config CRC mismatch - corruption detected! Relay forced OFF.");
-        return ret;
-    }
-
-    if (ret != ESP_OK) {
-        serial_send_error("nvs_error", "Failed to load config from NVS");
-        return ret;
-    }
-
-    // Format response with all config fields
-    char response[256];
-    snprintf(response, sizeof(response),
-             "config_loaded|MAC=%s|type=%d|timer=%d|retrigger=%d|version=%d|CRC=0x%08lX",
-             config.sensor_mac,
-             config.sensor_type,
-             config.timer_seconds,
-             config.retrigger_mode,
-             config.config_version,
-             (unsigned long)config.config_crc);
-    serial_send_ok(response);
-
-    ESP_LOGI(TAG, "TEST_LOAD_CONFIG: Config loaded successfully (CRC valid)");
     return ESP_OK;
 }
 
@@ -1218,28 +924,6 @@ static esp_err_t cmd_help(const char *args)
     }
 
     ESP_LOGI(TAG, "HELP command executed");
-    return ESP_OK;
-}
-
-/**
- * TEST_HANG command handler (Story 4B.5 AC4)
- * Tests watchdog timer by hanging the firmware in an infinite loop.
- * Watchdog should trigger reset within 10 seconds.
- */
-static esp_err_t cmd_test_hang(const char *args)
-{
-    (void)args;  // Unused
-
-    serial_send_ok("hanging_firmware");
-    ESP_LOGW(TAG, "TEST_HANG: Entering infinite loop - watchdog should trigger reset in 10s");
-
-    // Infinite loop without calling esp_task_wdt_reset()
-    // Watchdog timer should trigger panic and reset within 10 seconds
-    while (1) {
-        vTaskDelay(pdMS_TO_TICKS(100));
-    }
-
-    // Never reached
     return ESP_OK;
 }
 

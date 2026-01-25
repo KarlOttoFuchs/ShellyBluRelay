@@ -4,9 +4,9 @@
  * Story 1.5: Serial Protocol Foundation & Hardware Test Suite
  * Story 3.3: Manual Sensor Registration via Serial Command
  *
- * This component implements the serial command protocol for hardware validation
- * and configuration commands. It provides a text-based command interface
- * over USB Serial JTAG for testing relay, LEDs, button, and sensor registration.
+ * This component implements the serial command protocol for configuration
+ * and diagnostic commands. It provides a text-based command interface
+ * over USB Serial JTAG for sensor registration, relay control, and system status.
  *
  * Protocol Format (per architecture.md):
  *   Command:  COMMAND [ARG1] [ARG2]\n
@@ -16,12 +16,17 @@
  * Usage:
  *   serial_protocol_init();  // Initialize USB Serial JTAG and start command task
  *
- * Available Commands:
+ * Production Commands:
  *   PING                           - Test connectivity (responds: pong)
- *   TEST_RELAY [ON|OFF]            - Control relay
- *   TEST_LED [STATUS|ERROR] [ON|OFF|BLINK] - Control LEDs
- *   TEST_BUTTON                    - Read button state
- *   REGISTER_SENSOR MAC TYPE       - Register sensor by MAC (Story 3.3)
+ *   STATUS                         - Show system state, config, and sensor info
+ *   RELAY [ON|OFF]                 - Manually control relay
+ *   REGISTER_SENSOR <MAC> <TYPE>   - Register sensor (BUTTON/MOTION/DOOR)
+ *   CLEAR_SENSOR                   - Clear registered sensor configuration
+ *   SET_TIMER <1-600>              - Set relay timer duration in seconds
+ *   SET_RETRIGGER [EXTEND|IGNORE]  - Set timer retriggering mode
+ *   BLE_SCAN                       - Show recently seen BLE devices
+ *   BLE_EVENTS                     - Show last 10 sensor events
+ *   GET_ERRORS                     - Show last 10 system errors
  *   HELP                           - Show available commands
  */
 
