@@ -49,7 +49,6 @@ static bool serial_initialized = false;
 static TaskHandle_t serial_task_handle = NULL;
 
 // Forward declarations for command handlers
-static esp_err_t cmd_ping(const char *args);
 static esp_err_t cmd_status(const char *args);
 static esp_err_t cmd_relay(const char *args);
 static esp_err_t cmd_ble_scan(const char *args);
@@ -60,6 +59,7 @@ static esp_err_t cmd_register_sensor(const char *args);
 static esp_err_t cmd_clear_sensor(const char *args);
 static esp_err_t cmd_set_timer(const char *args);
 static esp_err_t cmd_set_retrigger(const char *args);
+static esp_err_t cmd_hw_test(const char *args);
 
 // Command handler function type
 typedef esp_err_t (*cmd_handler_fn)(const char *args);
@@ -73,9 +73,9 @@ typedef struct {
 
 // Command registry - sentinel terminated
 static const serial_command_t commands[] = {
-    {"PING",           cmd_ping,           "PING - Test connectivity (responds: pong)"},
     {"STATUS",         cmd_status,         "STATUS - Show system state, config, and learning mode info"},
     {"RELAY",          cmd_relay,          "RELAY [ON|OFF] - Manually control relay"},
+    {"HW_TEST",        cmd_hw_test,        "HW_TEST - Run comprehensive hardware validation test"},
     {"BLE_SCAN",       cmd_ble_scan,       "BLE_SCAN - Show recently seen BLE devices"},
     {"BLE_EVENTS",     cmd_ble_events,     "BLE_EVENTS - Show last 10 sensor events"},
     {"GET_ERRORS",     cmd_get_errors,     "GET_ERRORS - Show last 10 system errors"},
@@ -118,18 +118,6 @@ void serial_send_raw(const char *str)
 // ============================================================================
 // Command Handlers
 // ============================================================================
-
-/**
- * PING command handler
- * Responds with OK|pong to verify serial connectivity
- */
-static esp_err_t cmd_ping(const char *args)
-{
-    (void)args;  // Unused
-    serial_send_ok("pong");
-    ESP_LOGI(TAG, "PING received, responded with pong");
-    return ESP_OK;
-}
 
 /**
  * Helper: Build error summary string for STATUS command (Story 5.3)
@@ -340,6 +328,105 @@ static esp_err_t cmd_relay(const char *args)
         serial_send_error("invalid_argument", "Relay state must be ON or OFF");
         return ESP_ERR_INVALID_ARG;
     }
+
+    return ESP_OK;
+}
+
+/**
+ * HW_TEST command handler (Story 1.6 - Manual Validation)
+ * Waits for button press, then runs manual hardware validation sequence.
+ * Technician observes LEDs and hears relay click to validate hardware.
+ *
+ * Response format:
+ *   OK|hw_test_waiting|Press the button to start hardware validation
+ *   (after button press)
+ *   OK|hw_test_complete
+ *
+ * Validation sequence:
+ *   1. Wait for button press (max 30 seconds)
+ *   2. Flash white status LED (500ms) - technician observes
+ *   3. Flash red error LED (500ms) - technician observes
+ *   4. Pulse relay ON→OFF (500ms) - technician hears audible click
+ *   Total: ~1.5 seconds after button press
+ */
+static esp_err_t cmd_hw_test(const char *args)
+{
+    (void)args;  // No arguments expected
+
+    ESP_LOGI(TAG, "HW_TEST: Waiting for button press to start validation...");
+
+    // Send waiting message to technician
+    serial_send_ok("hw_test_waiting|Press the button to start hardware validation");
+
+    // Wait for button press (max 30 seconds)
+    int timeout_count = 0;
+    const int TIMEOUT_MS = 30000;
+    const int POLL_INTERVAL_MS = 100;
+
+    while (timeout_count < TIMEOUT_MS) {
+        if (button_is_pressed()) {
+            // Button pressed - start validation sequence
+            ESP_LOGI(TAG, "HW_TEST: Button pressed, starting validation sequence");
+
+            // Wait for button release (debounce)
+            while (button_is_pressed()) {
+                vTaskDelay(pdMS_TO_TICKS(50));
+            }
+
+            break;
+        }
+
+        vTaskDelay(pdMS_TO_TICKS(POLL_INTERVAL_MS));
+        timeout_count += POLL_INTERVAL_MS;
+
+        // Reset watchdog every second during wait
+        if (timeout_count % 1000 == 0) {
+            esp_task_wdt_reset();
+        }
+    }
+
+    // Check for timeout
+    if (timeout_count >= TIMEOUT_MS) {
+        ESP_LOGW(TAG, "HW_TEST: Timeout - button not pressed within 30 seconds");
+        serial_send_error("hw_test_timeout", "Button not pressed within 30 seconds");
+        return ESP_ERR_TIMEOUT;
+    }
+
+    // ========================================================================
+    // Manual Validation Sequence - Technician Observes
+    // ========================================================================
+
+    // 1. Flash white status LED (500ms)
+    ESP_LOGI(TAG, "HW_TEST: Flashing status LED");
+    led_set_state(LED_STATUS, true);
+    vTaskDelay(pdMS_TO_TICKS(500));
+    led_set_state(LED_STATUS, false);
+    vTaskDelay(pdMS_TO_TICKS(200));  // Pause between flashes
+
+    esp_task_wdt_reset();
+
+    // 2. Flash red error LED (500ms)
+    ESP_LOGI(TAG, "HW_TEST: Flashing error LED");
+    led_set_state(LED_ERROR, true);
+    vTaskDelay(pdMS_TO_TICKS(500));
+    led_set_state(LED_ERROR, false);
+    vTaskDelay(pdMS_TO_TICKS(200));  // Pause before relay
+
+    esp_task_wdt_reset();
+
+    // 3. Pulse relay ON → OFF (500ms) - audible click validation
+    ESP_LOGI(TAG, "HW_TEST: Pulsing relay");
+    relay_set_state(true);
+    vTaskDelay(pdMS_TO_TICKS(500));
+    relay_set_state(false);  // Safety: always return to OFF
+
+    esp_task_wdt_reset();
+
+    // ========================================================================
+    // Test sequence complete - technician validates visually/audibly
+    // ========================================================================
+    ESP_LOGI(TAG, "HW_TEST: Validation sequence complete");
+    serial_send_ok("hw_test_complete");
 
     return ESP_OK;
 }

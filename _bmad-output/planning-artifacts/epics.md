@@ -420,9 +420,10 @@ So that I can quickly verify newly assembled boards work correctly.
 **When** I connect via USB serial at 115200 baud (8N1)
 **Then** firmware responds to the following test commands:
 
-**Command: `PING`**
-- Firmware responds: `OK|pong\n`
-- Validates serial communication (FR5)
+**Serial connectivity validated by HW_TEST command** (Story 1.6)
+- If HW_TEST responds, serial communication is functional
+- No separate PING command needed
+- HW_TEST validates both serial and hardware in single command
 
 **Command: `TEST_RELAY ON`**
 - Firmware responds: `OK|relay_on\n`
@@ -486,36 +487,38 @@ As a hardware technician or field engineer,
 I want a single command that validates all hardware components in one test sequence,
 So that I can quickly verify a newly assembled or deployed board without running multiple separate commands.
 
-**Context:** After cleanup of test commands (commit e20d464), individual TEST_LED, TEST_BUTTON commands were removed as development scaffolding. Story 1.6 provides a comprehensive HW_TEST command that exercises all components in a single atomic test sequence.
+**Context:** After cleanup of test commands (commit e20d464), individual TEST_LED, TEST_BUTTON commands were removed as development scaffolding. Story 1.6 provides a manual HW_TEST validation command where technician triggers test via button press and observes hardware operation visually/audibly.
 
 **Acceptance Criteria:**
 
 **Given** firmware is running on ESP32-C3 hardware
 **When** user sends `HW_TEST\n` command
-**Then** firmware executes comprehensive hardware test sequence:
-1. Button state read (validates GPIO9 input)
-2. Status LED blink (validates GPIO10 output)
-3. Error LED blink (validates GPIO8 output)
-4. Relay pulse ON→OFF (validates GPIO7 output)
+**Then** firmware responds: `OK|hw_test_waiting|Press the button to start hardware validation`
+**And** firmware waits for button press (max 30 seconds)
 
-**And** firmware responds with pass/fail status for each component:
-```
-OK|hw_test|button:PASS|status_led:PASS|error_led:PASS|relay:PASS
-```
+**When** technician presses button
+**Then** firmware executes manual validation sequence:
+1. Flash white status LED (500ms) - technician observes
+2. Flash red error LED (500ms) - technician observes
+3. Pulse relay ON→OFF (500ms) - technician hears audible click
 
-**And** test completes in approximately 1.5 seconds (200ms per LED + 500ms relay pulse)
+**And** firmware responds: `OK|hw_test_complete`
 
-**And** all components return to previous state after test (safety: relay returns to OFF)
+**And** test sequence completes in approximately 2 seconds after button press
 
-**And** failed component tests are logged to error_log with code `HW_TEST_FAIL`
+**And** technician validates hardware by observation (no automated pass/fail)
 
-**And** test is safer than PING for field validation (actually exercises hardware)
+**And** all components return to safe state (LEDs OFF, relay OFF)
+
+**And** timeout occurs if button not pressed within 30 seconds: `ERROR|hw_test_timeout|Button not pressed within 30 seconds`
+
+**And** replaces PING command (HW_TEST validates both serial and hardware)
 
 **And** HELP command includes: `HW_TEST - Run comprehensive hardware validation test`
 
-**Dependencies:** Stories 1.2 (relay), 1.3 (button), 1.4 (LEDs), 5.2 (error logging)
+**Dependencies:** Stories 1.2 (relay), 1.3 (button), 1.4 (LEDs)
 
-**Related:** Replaces TEST_LED, TEST_BUTTON, TEST_RELAY removed in cleanup commit e20d464
+**Related:** Replaces TEST_LED, TEST_BUTTON, TEST_RELAY and PING commands
 
 ## Epic 2: BLE Sensor Communication & Parsing
 

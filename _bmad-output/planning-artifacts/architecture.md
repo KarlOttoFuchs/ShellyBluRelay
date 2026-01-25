@@ -272,13 +272,16 @@ ERROR|code|message\n      # Error with code and description
 
 **Command Set (MVP):**
 - `STATUS` - Returns JSON with state, sensor info, RSSI, battery%, events
-- `TEST_RELAY [ON|OFF]` - Manual relay control
-- `REGISTER_SENSOR [MAC]` - Manual sensor registration (fallback mode)
+- `HW_TEST` - Manual hardware validation (button trigger, LED flash, relay pulse)
+- `RELAY [ON|OFF]` - Manual relay control
+- `REGISTER_SENSOR [MAC] [TYPE]` - Manual sensor registration (MAC and type: BUTTON/MOTION/DOOR)
 - `CLEAR_SENSOR` - Unregister sensor
 - `SET_TIMER [seconds]` - Configure relay duration (1-600)
 - `SET_RETRIGGER [extend|ignore]` - Configure retriggering behavior
-- `GET_LOGS` - Return last 10 events
-- `PING` - Connectivity test (returns OK|pong)
+- `GET_EVENTS` - Return last 10 trigger events
+- `GET_ERRORS` - Return last 10 system errors
+- `BLE_SCAN` - Show recently seen BLE devices
+- `BLE_EVENTS` - Show last 10 sensor events
 - `HELP` - List available commands
 
 **Error Codes:**
