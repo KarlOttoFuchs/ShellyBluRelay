@@ -61,6 +61,9 @@ static esp_err_t cmd_set_timer(const char *args);
 static esp_err_t cmd_set_retrigger(const char *args);
 static esp_err_t cmd_hw_test(const char *args);
 
+// Forward declaration for helper function (defined later in file)
+static const char* sensor_type_to_string(sensor_type_t type);
+
 // Command handler function type
 typedef esp_err_t (*cmd_handler_fn)(const char *args);
 
@@ -93,13 +96,46 @@ static const serial_command_t commands[] = {
 
 static void serial_write(const char *str, size_t len)
 {
-    usb_serial_jtag_write_bytes((const uint8_t *)str, len, pdMS_TO_TICKS(100));
+    // USB Serial JTAG has 64-byte FIFO - write in chunks to avoid overflow (Story 5.3 Corrective)
+    const size_t CHUNK_SIZE = 64;
+    size_t offset = 0;
+    size_t total_written = 0;
+
+    while (offset < len) {
+        size_t chunk = (len - offset) > CHUNK_SIZE ? CHUNK_SIZE : (len - offset);
+
+        // Generous timeout per chunk
+        int written = usb_serial_jtag_write_bytes((const uint8_t *)(str + offset), chunk, pdMS_TO_TICKS(200));
+
+        if (written > 0) {
+            offset += written;
+            total_written += written;
+        } else {
+            ESP_LOGW(TAG, "serial_write: Chunk write failed at offset %zu", offset);
+            break;
+        }
+
+        // Small delay between chunks to let FIFO drain
+        vTaskDelay(pdMS_TO_TICKS(5));
+    }
+
+    if (total_written < len) {
+        ESP_LOGW(TAG, "serial_write: Incomplete write! Wanted %zu, wrote %zu", len, total_written);
+    }
 }
 
 void serial_send_ok(const char *data)
 {
-    char response[512];  // Increased for STATUS JSON responses
+    static char response[1100];  // Static to avoid stack overflow - Story 5.3 Corrective
+
     int len = snprintf(response, sizeof(response), "OK|%s\n", data);
+
+    // Clamp len to actual buffer size if snprintf wanted to write more
+    if (len >= sizeof(response)) {
+        len = sizeof(response) - 1;
+        ESP_LOGW(TAG, "serial_send_ok: Response truncated (wanted %d bytes, have %zu)", len, sizeof(response));
+    }
+
     serial_write(response, len);
 }
 
@@ -157,32 +193,118 @@ static void build_error_summary(char *buffer, size_t buffer_size)
 }
 
 /**
- * STATUS command handler (Story 3.2, updated Story 3.4, Story 4A.1, Story 4B.4, Story 5.3, Story 5.4)
- * Returns system state, sensor config, learning mode status, and boot reason
- * Response format: OK|{"state":"...","boot_reason":"...","sensor_registered":bool,...}
+ * Helper: Convert retrigger mode to human-readable string (Story 5.3 Corrective)
  *
- * Story 4B.4 AC3: All responses include "boot_reason" field
+ * @param retrigger_mode Mode value (0=EXTEND, 1=IGNORE)
+ * @return String representation
+ */
+static const char* retrigger_mode_to_string(uint8_t retrigger_mode)
+{
+    return (retrigger_mode == 0) ? "EXTEND" : "IGNORE";
+}
+
+/**
+ * Helper: Structure for sensor diagnostic data (Story 5.3 Corrective)
+ */
+typedef struct {
+    uint8_t battery_pct;       // 0-100%, or 255=BATTERY_UNKNOWN
+    int8_t rssi;               // Signal strength in dBm
+    uint32_t last_seen_sec_ago; // Seconds since last BLE packet
+    bool in_range;             // Sensor seen within last 60 seconds
+} sensor_diagnostics_t;
+
+/**
+ * Helper: Query sensor diagnostics from BLE scanner and BTHome parser (Story 5.3 Corrective)
  *
- * When unconfigured (AC7):
- * {"state":"unconfigured","boot_reason":"POWER_ON","sensor_registered":false,"sensor_mac":"","sensor_type":""}
+ * @param sensor_mac MAC address of registered sensor
+ * @param diag       Output structure for diagnostic data
+ */
+static void get_sensor_diagnostics(const char *sensor_mac, sensor_diagnostics_t *diag)
+{
+    // Initialize with defaults (sensor not seen)
+    diag->battery_pct = BATTERY_UNKNOWN;
+    diag->rssi = 0;
+    diag->last_seen_sec_ago = 0;
+    diag->in_range = false;
+
+    if (!sensor_mac || sensor_mac[0] == '\0') {
+        return;
+    }
+
+    // Get battery level from BTHome parser (global, updated on packet parse)
+    diag->battery_pct = bthome_get_battery_level();
+
+    // Query BLE scanner for registered sensor
+    ble_tracked_device_t devices[BLE_MAX_TRACKED_DEVICES];
+    uint32_t device_count = 0;
+
+    if (ble_scanner_get_devices(devices, BLE_MAX_TRACKED_DEVICES, &device_count) == ESP_OK) {
+        // Find registered sensor in tracked devices
+        for (uint32_t i = 0; i < device_count; i++) {
+            if (strcasecmp(devices[i].mac, sensor_mac) == 0) {
+                diag->rssi = devices[i].rssi;
+
+                // Calculate time since last seen
+                uint32_t now_ms = esp_timer_get_time() / 1000;  // Convert µs to ms
+                uint32_t age_ms = now_ms - devices[i].last_seen_ms;
+                diag->last_seen_sec_ago = age_ms / 1000;
+
+                // Check if in range (60 second threshold)
+                diag->in_range = (age_ms < 60000);
+                break;
+            }
+        }
+    }
+}
+
+/**
+ * STATUS command handler (Story 3.2, 3.4, 4A.1, 4B.4, 5.3 Corrective, 5.4)
+ * Returns comprehensive system state, sensor diagnostics, config, and errors
  *
- * When ACTIVE (Story 4A.1 AC8):
- * {"state":"ACTIVE","boot_reason":"POWER_ON","relay":"on","timer_remaining":0,"sensor_mac":"...","sensor_type":"...","last_trigger_ms":...}
+ * Story 5.3 Corrective: Nested JSON structure with complete sensor diagnostics
+ *
+ * Response format (LISTENING state):
+ * {
+ *   "state": "listening",
+ *   "relay": "off",
+ *   "timer_remaining_sec": 0,
+ *   "sensor": {
+ *     "registered": true,
+ *     "mac": "AA:BB:CC:DD:EE:FF",
+ *     "type": "MOTION",
+ *     "battery": 87,
+ *     "last_seen_sec_ago": 5,
+ *     "rssi": -52,
+ *     "in_range": true
+ *   },
+ *   "config": {
+ *     "timer_duration_sec": 30,
+ *     "retrigger_mode": "EXTEND"
+ *   },
+ *   "firmware": {
+ *     "version": "1.0.0",
+ *     "boot_reason": "POWER_ON"
+ *   },
+ *   "errors": {
+ *     "count": 0,
+ *     "last_error": null
+ *   }
+ * }
  */
 static esp_err_t cmd_status(const char *args)
 {
     (void)args;  // Unused
 
-    char response[640];  // Story 5.3/5.4: Increased for firmware + error fields
-    char error_summary[128];  // Buffer for error summary
+    static char response[1024];  // Static to avoid stack overflow - Story 5.3 Corrective
+    static char error_summary[128];  // Static to avoid stack overflow
     system_state_t state = state_get_current();
     const char *state_str = state_to_string(state);
     const char *boot_reason = get_boot_reason_string();  // Story 4B.4
 
-    // Build error summary once (used in all response branches) - Story 5.3
+    // Build error summary once (used in all response branches)
     build_error_summary(error_summary, sizeof(error_summary));
 
-    // Get firmware version - Story 5.4
+    // Get firmware version
     const char *fw_version = get_firmware_version();
 
     // Load config if available
@@ -190,33 +312,55 @@ static esp_err_t cmd_status(const char *args)
     esp_err_t config_ret = nvs_load_config(&config);
     bool has_config = (config_ret == ESP_OK);
 
-    // Build JSON response - all responses include boot_reason (Story 4B.4 AC3)
+    // Query sensor diagnostics if configured (Story 5.3 Corrective)
+    sensor_diagnostics_t diag = {0};
+    if (has_config) {
+        get_sensor_diagnostics(config.sensor_mac, &diag);
+    }
+
+    // Build JSON response with nested structure (Story 5.3 Corrective)
     if (state == STATE_LEARNING) {
         // Learning mode: include time remaining
         uint32_t time_remaining = learning_mode_time_remaining_sec();
 
         if (has_config) {
+            // Learning mode with existing sensor config
+            const char *sensor_type_str = sensor_type_to_string((sensor_type_t)config.sensor_type);
+            const char *retrigger_str = retrigger_mode_to_string(config.retrigger_mode);
+
             snprintf(response, sizeof(response),
-                     "{\"state\":\"%s\",\"boot_reason\":\"%s\",\"time_remaining_sec\":%lu,\"sensor_registered\":true,\"sensor_mac\":\"%s\",\"sensor_type\":%d,\"timer_seconds\":%d,\"firmware\":{\"version\":\"%s\"},%s}",
+                     "{\"state\":\"%s\",\"relay\":\"off\",\"time_remaining_sec\":%lu,"
+                     "\"sensor\":{\"registered\":true,\"mac\":\"%s\",\"type\":\"%s\","
+                     "\"battery\":%u,\"last_seen_sec_ago\":%lu,\"rssi\":%d,\"in_range\":%s},"
+                     "\"config\":{\"timer_duration_sec\":%d,\"retrigger_mode\":\"%s\"},"
+                     "\"firmware\":{\"version\":\"%s\",\"boot_reason\":\"%s\"},%s}",
                      state_str,
-                     boot_reason,
                      (unsigned long)time_remaining,
                      config.sensor_mac,
-                     config.sensor_type,
+                     sensor_type_str,
+                     diag.battery_pct,
+                     (unsigned long)diag.last_seen_sec_ago,
+                     diag.rssi,
+                     diag.in_range ? "true" : "false",
                      config.timer_seconds,
+                     retrigger_str,
                      fw_version,
+                     boot_reason,
                      error_summary);
         } else {
+            // Learning mode without prior sensor registration
             snprintf(response, sizeof(response),
-                     "{\"state\":\"%s\",\"boot_reason\":\"%s\",\"time_remaining_sec\":%lu,\"sensor_registered\":false,\"sensor_mac\":\"\",\"sensor_type\":\"\",\"firmware\":{\"version\":\"%s\"},%s}",
+                     "{\"state\":\"%s\",\"relay\":\"off\",\"time_remaining_sec\":%lu,"
+                     "\"sensor\":{\"registered\":false},"
+                     "\"firmware\":{\"version\":\"%s\",\"boot_reason\":\"%s\"},%s}",
                      state_str,
-                     boot_reason,
                      (unsigned long)time_remaining,
                      fw_version,
+                     boot_reason,
                      error_summary);
         }
     } else if (state == STATE_ACTIVE) {
-        // ACTIVE state (Story 4A.1 AC8, Story 4A.2 AC3, Story 4A.4): include relay state, timer remaining, last trigger info, retrigger mode
+        // ACTIVE state: relay energized, timer running
         bool relay_on = relay_get_state();
         uint16_t timer_remaining = relay_timer_get_remaining_sec();
         uint32_t last_trigger = relay_get_last_trigger_ms();
@@ -224,58 +368,71 @@ static esp_err_t cmd_status(const char *args)
         relay_get_last_trigger_mac(trigger_mac, sizeof(trigger_mac));
         uint8_t trigger_sensor_type = relay_get_last_trigger_sensor_type();
 
-        // Convert sensor type to string
-        const char *sensor_type_str = "UNKNOWN";
-        switch (trigger_sensor_type) {
-            case 1: sensor_type_str = "BUTTON"; break;
-            case 2: sensor_type_str = "MOTION"; break;
-            case 3: sensor_type_str = "DOOR"; break;
-        }
-
-        // Get retrigger_mode from config (Story 4A.4)
-        int retrigger_mode = 0;  // Default EXTEND
-        if (has_config) {
-            retrigger_mode = config.retrigger_mode;
-        }
+        const char *sensor_type_str = sensor_type_to_string((sensor_type_t)trigger_sensor_type);
+        const char *retrigger_str = retrigger_mode_to_string(has_config ? config.retrigger_mode : 0);
 
         snprintf(response, sizeof(response),
-                 "{\"state\":\"%s\",\"boot_reason\":\"%s\",\"relay\":\"%s\",\"timer_remaining\":%u,\"sensor_mac\":\"%s\",\"sensor_type\":\"%s\",\"last_trigger_ms\":%lu,\"retrigger_mode\":%d,\"firmware\":{\"version\":\"%s\"},%s}",
+                 "{\"state\":\"%s\",\"relay\":\"%s\",\"timer_remaining_sec\":%u,"
+                 "\"sensor\":{\"registered\":true,\"mac\":\"%s\",\"type\":\"%s\","
+                 "\"battery\":%u,\"last_seen_sec_ago\":%lu,\"rssi\":%d,\"in_range\":%s},"
+                 "\"last_trigger_ms\":%lu,"
+                 "\"config\":{\"timer_duration_sec\":%d,\"retrigger_mode\":\"%s\"},"
+                 "\"firmware\":{\"version\":\"%s\",\"boot_reason\":\"%s\"},%s}",
                  state_str,
-                 boot_reason,
                  relay_on ? "on" : "off",
                  timer_remaining,
                  trigger_mac,
                  sensor_type_str,
+                 diag.battery_pct,
+                 (unsigned long)diag.last_seen_sec_ago,
+                 diag.rssi,
+                 diag.in_range ? "true" : "false",
                  (unsigned long)last_trigger,
-                 retrigger_mode,
+                 has_config ? config.timer_seconds : 30,
+                 retrigger_str,
                  fw_version,
+                 boot_reason,
                  error_summary);
     } else if (state == STATE_UNCONFIGURED || !has_config) {
-        // Unconfigured state (AC7): sensor_registered=false, empty strings
+        // Unconfigured state: no sensor registered
         snprintf(response, sizeof(response),
-                 "{\"state\":\"%s\",\"boot_reason\":\"%s\",\"sensor_registered\":false,\"sensor_mac\":\"\",\"sensor_type\":\"\",\"firmware\":{\"version\":\"%s\"},%s}",
+                 "{\"state\":\"%s\",\"relay\":\"off\",\"timer_remaining_sec\":0,"
+                 "\"sensor\":{\"registered\":false},"
+                 "\"firmware\":{\"version\":\"%s\",\"boot_reason\":\"%s\"},%s}",
                  state_str,
-                 boot_reason,
                  fw_version,
+                 boot_reason,
                  error_summary);
     } else {
-        // Configured state (LISTENING) - Story 4A.2 AC7: include relay and timer_remaining
+        // Configured state (LISTENING): waiting for sensor trigger
         bool relay_on = relay_get_state();
+        const char *sensor_type_str = sensor_type_to_string(config.sensor_type);
+        const char *retrigger_str = retrigger_mode_to_string(config.retrigger_mode);
+
         snprintf(response, sizeof(response),
-                 "{\"state\":\"%s\",\"boot_reason\":\"%s\",\"relay\":\"%s\",\"timer_remaining\":0,\"sensor_registered\":true,\"sensor_mac\":\"%s\",\"sensor_type\":%d,\"timer_seconds\":%d,\"retrigger_mode\":%d,\"firmware\":{\"version\":\"%s\"},%s}",
+                 "{\"state\":\"%s\",\"relay\":\"%s\",\"timer_remaining_sec\":0,"
+                 "\"sensor\":{\"registered\":true,\"mac\":\"%s\",\"type\":\"%s\","
+                 "\"battery\":%u,\"last_seen_sec_ago\":%lu,\"rssi\":%d,\"in_range\":%s},"
+                 "\"config\":{\"timer_duration_sec\":%d,\"retrigger_mode\":\"%s\"},"
+                 "\"firmware\":{\"version\":\"%s\",\"boot_reason\":\"%s\"},%s}",
                  state_str,
-                 boot_reason,
                  relay_on ? "on" : "off",
                  config.sensor_mac,
-                 config.sensor_type,
+                 sensor_type_str,
+                 diag.battery_pct,
+                 (unsigned long)diag.last_seen_sec_ago,
+                 diag.rssi,
+                 diag.in_range ? "true" : "false",
                  config.timer_seconds,
-                 config.retrigger_mode,
+                 retrigger_str,
                  fw_version,
+                 boot_reason,
                  error_summary);
     }
 
     serial_send_ok(response);
-    ESP_LOGI(TAG, "STATUS: state=%s, boot_reason=%s", state_str, boot_reason);
+    ESP_LOGI(TAG, "STATUS: state=%s, battery=%u%%, rssi=%ddBm, in_range=%s",
+             state_str, diag.battery_pct, diag.rssi, diag.in_range ? "true" : "false");
     return ESP_OK;
 }
 
