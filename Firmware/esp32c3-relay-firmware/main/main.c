@@ -6,6 +6,9 @@
  * Story 1.3: Button Input Component Integration
  * Story 1.4: LED Control Component Integration
  * Story 1.5: Serial Protocol Foundation & Hardware Test Suite
+ * Story 1.7: Button Short-Press Detection
+ * Story 1.8: LED Counted Blink Function
+ * Story 1.9: Timer Preset Cycling Logic
  * Story 2.1: Initialize BLE Stack & Scan for Advertising Packets
  * Story 2.2: Implement BTHome v2 Parser with Handler Registry
  * Story 3.1: NVS Storage Component with CRC Validation
@@ -34,6 +37,7 @@
 #include "boot_reason.h"  // Story 4B.4: Boot reason tracking
 #include "error_log.h"  // Story 5.2: Error logging
 #include "firmware_version.h"  // Story 5.4: Firmware version
+#include "timer_presets.h"  // Story 1.9: Timer preset cycling
 
 static const char *TAG = "MAIN";
 
@@ -164,6 +168,18 @@ void app_main(void) {
     }
 
     // ============================================================================
+    // Story 1.9: Initialize timer presets component
+    // ============================================================================
+
+    ret = timer_presets_init();
+    if (ret != ESP_OK) {
+        ESP_LOGW(TAG, "Timer presets initialization failed: %s", esp_err_to_name(ret));
+        // Non-critical - continue anyway
+    }
+
+    ESP_LOGI(TAG, "Timer presets initialized");
+
+    // ============================================================================
     // Initialize serial protocol component
     // ============================================================================
 
@@ -268,6 +284,7 @@ void app_main(void) {
     ESP_LOGI(TAG, "Firmware initialized successfully");
     ESP_LOGI(TAG, "Hardware test commands available via serial");
     ESP_LOGI(TAG, "Type HELP for available commands");
+    ESP_LOGI(TAG, "Short-press button (<500ms) to cycle timer presets");
     ESP_LOGI(TAG, "Long-press button (2s) to enter learning mode");
     ESP_LOGI(TAG, "============================================");
 }
@@ -275,6 +292,7 @@ void app_main(void) {
 /**
  * Main loop task - handles button monitoring and learning mode processing
  *
+ * Story 1.9: Processes timer preset cycling (short-press button interaction)
  * Story 3.2: Checks for button long-press to enter learning mode,
  * and processes captured sensors when in learning mode.
  * Story 4B.5: Feeds watchdog timer to prevent system reset (AC2, AC3)
@@ -294,6 +312,10 @@ static void main_loop_task(void *pvParameters)
     }
 
     while (1) {
+        // Story 1.9: Process timer preset button interactions
+        // Handles short-press detection and LED feedback via Stories 1.7, 1.8
+        timer_presets_process();
+
         // Check for button long-press to enter learning mode
         if (button_check_long_press()) {
             // Only enter learning mode if not already in it

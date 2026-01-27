@@ -47,6 +47,13 @@ static const gpio_num_t led_gpios[LED_COUNT] = {
     LED_ERROR_GPIO    // LED_ERROR
 };
 
+// Story 1.8: Counted blink mode state
+static bool counted_blink_active[LED_COUNT] = {false, false};
+static uint8_t counted_blink_target[LED_COUNT] = {0, 0};
+static uint8_t counted_blink_current[LED_COUNT] = {0, 0};
+static led_pattern_t counted_blink_saved_pattern[LED_COUNT] = {LED_PATTERN_OFF, LED_PATTERN_OFF};
+static void (*counted_blink_callback[LED_COUNT])(void) = {NULL, NULL};
+
 /**
  * Get number of blinks for error pattern
  */
@@ -160,6 +167,67 @@ static void process_led_pattern(led_id_t led, uint32_t elapsed_ms)
 }
 
 /**
+ * Process counted blink for a single LED (Story 1.8)
+ * Called every LED_TASK_TICK_MS when counted_blink_active is true
+ *
+ * State machine:
+ *   state 1: LED ON during blink
+ *   state 0: LED OFF between blinks
+ *   state 2: LED OFF during post-blink pause (visual separation)
+ */
+static void process_counted_blink(led_id_t led, uint32_t elapsed_ms)
+{
+    if (!counted_blink_active[led]) {
+        return;  // Not in counted blink mode
+    }
+
+    gpio_num_t gpio = led_gpios[led];
+    led_timers[led] += elapsed_ms;
+
+    if (led_states[led] == 1) {
+        // LED is ON - wait for on duration
+        if (led_timers[led] >= LED_BLINK_COUNT_ON_MS) {
+            gpio_set_level(gpio, 0);
+            led_timers[led] = 0;
+            counted_blink_current[led]++;
+
+            // Check if all blinks complete
+            if (counted_blink_current[led] >= counted_blink_target[led]) {
+                // Enter pause state for visual separation before restoring pattern
+                led_states[led] = 2;
+            } else {
+                // More blinks to go
+                led_states[led] = 0;
+            }
+        }
+    } else if (led_states[led] == 0) {
+        // LED is OFF between blinks - wait for off duration, then turn on for next blink
+        if (led_timers[led] >= LED_BLINK_COUNT_OFF_MS) {
+            gpio_set_level(gpio, 1);
+            led_states[led] = 1;
+            led_timers[led] = 0;
+        }
+    } else {
+        // state 2: Post-blink pause - LED stays OFF for visual separation
+        if (led_timers[led] >= LED_BLINK_COUNT_PAUSE_MS) {
+            // Pause complete - restore pattern
+            counted_blink_active[led] = false;
+            led_set_pattern(led, counted_blink_saved_pattern[led]);
+
+            ESP_LOGI(TAG, "LED %s counted blink complete",
+                     led == LED_STATUS ? "STATUS" : "ERROR");
+
+            // Call callback if provided
+            if (counted_blink_callback[led] != NULL) {
+                void (*cb)(void) = counted_blink_callback[led];
+                counted_blink_callback[led] = NULL;
+                cb();
+            }
+        }
+    }
+}
+
+/**
  * LED pattern task
  * Runs patterns for all LEDs in non-blocking manner
  */
@@ -168,9 +236,14 @@ static void led_pattern_task(void *pvParameters)
     TickType_t last_wake_time = xTaskGetTickCount();
 
     while (1) {
-        // Process both LEDs
-        process_led_pattern(LED_STATUS, LED_TASK_TICK_MS);
-        process_led_pattern(LED_ERROR, LED_TASK_TICK_MS);
+        // Story 1.8: Process counted blinks first (takes priority over normal patterns)
+        for (int i = 0; i < LED_COUNT; i++) {
+            if (counted_blink_active[i]) {
+                process_counted_blink(i, LED_TASK_TICK_MS);
+            } else {
+                process_led_pattern(i, LED_TASK_TICK_MS);
+            }
+        }
 
         // Delay until next tick
         vTaskDelayUntil(&last_wake_time, pdMS_TO_TICKS(LED_TASK_TICK_MS));
@@ -305,5 +378,50 @@ esp_err_t led_get_pattern(led_id_t led, led_pattern_t *pattern)
     }
 
     *pattern = led_patterns[led];
+    return ESP_OK;
+}
+
+esp_err_t led_blink_count(led_id_t led, uint8_t count, void (*callback)(void))
+{
+    if (!led_initialized) {
+        ESP_LOGE(TAG, "LED control not initialized");
+        return ESP_ERR_INVALID_STATE;
+    }
+
+    if (led >= LED_COUNT) {
+        ESP_LOGE(TAG, "Invalid LED ID: %d", led);
+        return ESP_ERR_INVALID_ARG;
+    }
+
+    // Handle edge case: count = 0 (immediate callback, no blinks)
+    if (count == 0) {
+        if (callback != NULL) {
+            callback();
+        }
+        return ESP_OK;
+    }
+
+    // Clamp count to maximum
+    if (count > LED_BLINK_COUNT_MAX) {
+        count = LED_BLINK_COUNT_MAX;
+    }
+
+    // Save current pattern for restoration
+    led_get_pattern(led, &counted_blink_saved_pattern[led]);
+
+    // Initialize counted blink state
+    counted_blink_target[led] = count;
+    counted_blink_current[led] = 0;
+    counted_blink_callback[led] = callback;
+    counted_blink_active[led] = true;
+
+    // Start first blink (LED ON)
+    gpio_set_level(led_gpios[led], 1);
+    led_states[led] = 1;
+    led_timers[led] = 0;
+
+    ESP_LOGI(TAG, "LED %s counted blink started: %d blinks",
+             led == LED_STATUS ? "STATUS" : "ERROR", count);
+
     return ESP_OK;
 }

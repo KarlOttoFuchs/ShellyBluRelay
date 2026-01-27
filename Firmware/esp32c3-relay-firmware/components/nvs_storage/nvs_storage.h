@@ -28,7 +28,7 @@
 
 // Config constants
 #define CONFIG_VERSION          1       // Current config schema version
-#define DEFAULT_TIMER_SECONDS   30      // Default timer duration in seconds
+#define DEFAULT_TIMER_SECONDS   300     // Default timer duration in seconds (5 min per Story 1.9)
 #define DEFAULT_RETRIGGER_MODE  0       // Default: RETRIGGER_EXTEND
 
 // Timer limits (per FR19: 1-600 seconds)

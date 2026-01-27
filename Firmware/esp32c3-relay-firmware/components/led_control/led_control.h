@@ -21,6 +21,13 @@
 
 #include "esp_err.h"
 #include <stdbool.h>
+#include <stdint.h>
+
+// Story 1.8: Counted blink constants
+#define LED_BLINK_COUNT_ON_MS   250   // On duration for counted blinks
+#define LED_BLINK_COUNT_OFF_MS  250   // Off duration between counted blinks
+#define LED_BLINK_COUNT_PAUSE_MS 500  // Pause after blinks before restoring pattern
+#define LED_BLINK_COUNT_MAX     10    // Maximum blink count (clamped)
 
 /**
  * LED identifiers
@@ -91,5 +98,23 @@ esp_err_t led_set_state(led_id_t led, bool on);
  * @return ESP_ERR_INVALID_STATE if led_init() not called
  */
 esp_err_t led_get_pattern(led_id_t led, led_pattern_t *pattern);
+
+/**
+ * Blink LED a specific number of times (Story 1.8)
+ *
+ * Non-blocking function that queues counted blinks for execution by the
+ * LED pattern task. After all blinks complete, the LED returns to its
+ * previous pattern and the optional callback is invoked.
+ *
+ * Timing: 150ms on + 150ms off per blink (300ms per cycle)
+ *
+ * @param led LED identifier (LED_STATUS or LED_ERROR)
+ * @param count Number of blinks (1-10, 0 = immediate callback, >10 clamped to 10)
+ * @param callback Optional function called when blinks complete (may be NULL)
+ * @return ESP_OK on success
+ * @return ESP_ERR_INVALID_ARG if led is invalid
+ * @return ESP_ERR_INVALID_STATE if led_init() not called
+ */
+esp_err_t led_blink_count(led_id_t led, uint8_t count, void (*callback)(void));
 
 #endif // LED_CONTROL_H

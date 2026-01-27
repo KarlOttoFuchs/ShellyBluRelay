@@ -1605,7 +1605,13 @@ So that I can track deployed firmware versions and diagnose unexpected resets.
 
 **And** validates FR39 (firmware update via standard ESP-IDF tools - `idf.py flash`), FR40 (firmware version accessible), FR41 (boot reason logged)
 
-## Epic 6: Python CLI Tool - Core Commands
+## Epic 6: Python CLI Tool - Core Commands [DEFERRED TO V1.1]
+
+> **⚠️ DEFERRED:** This epic has been postponed to V1.1 per Sprint Change Proposal (2026-01-27).
+>
+> **Rationale:** The firmware serial protocol (Epic 5) provides complete command access via any serial terminal. The CLI adds convenience (auto-port detection, Rich formatting, auto-generated help) but is not essential for MVP value delivery.
+>
+> **User Access:** Until CLI is available, users can access all commands via serial terminal (PuTTY, screen, minicom) at 115200 baud. See serial protocol documentation for command reference.
 
 Users can configure and control the relay module via professional CLI interface.
 
@@ -1897,11 +1903,17 @@ if (state == STATE_LISTENING && mac_matches_registered()) {
 
 **And** validates FR45 (inline comments for BTHome parsing, state transitions), NFM4 (non-obvious code has explanatory comments)
 
-### Story 7.4: Implement CLI Auto-Generated Help System
+### Story 7.4: Implement CLI Auto-Generated Help System [NOT APPLICABLE - V1.1]
 
-As a user,
+> **⚠️ NOT APPLICABLE:** This story depends on Epic 6 (Python CLI Tool) which has been deferred to V1.1.
+>
+> This story will be implemented when Epic 6 is developed in V1.1.
+
+~~As a user,
 I want comprehensive auto-generated help for all CLI commands,
-So that I can learn how to use the CLI without reading separate documentation.
+So that I can learn how to use the CLI without reading separate documentation.~~
+
+**Deferred to:** V1.1 (when Epic 6 CLI is implemented)
 
 **Acceptance Criteria:**
 

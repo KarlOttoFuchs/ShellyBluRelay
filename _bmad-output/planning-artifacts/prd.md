@@ -119,7 +119,7 @@ This greenfield IoT/embedded project delivers both firmware (ESP32-C3, BLE, BTHo
 7. **Relay Control with Timer** - Countdown timer (1-600 seconds), relay switches OFF on expiration
 8. **Configurable Retriggering** - "extend timer" vs. "ignore" modes for motion sensor use cases
 9. **Event Buffer** - Last 10 trigger events with timestamps (uptime-based acceptable for MVP)
-10. **Python CLI (Core Commands)** - status, test-relay, register-sensor, set-timer, set-retrigger, logs, clear-sensor
+10. ~~**Python CLI (Core Commands)**~~ → **DEFERRED TO V1.1** - Serial terminal access provides equivalent functionality via firmware commands (STATUS, REGISTER_SENSOR, SET_TIMER, etc. at 115200 baud)
 11. **Comprehensive Status Command** - Current state, sensor info, event history, error log, config summary
 12. **Error LED Patterns** - Visual diagnostics (steady, slow blink, fast blink, double blink codes)
 13. **Sensor Battery Health Monitoring** - Warning LED + status message when battery <20%, error at <10%
@@ -1061,7 +1061,11 @@ This MVP prioritizes delivering immediate user value (Marcus's "got it working, 
 - FR25: Users can retrieve error log for troubleshooting
 - FR26: Users can query comprehensive system status including current state, sensor info (MAC, last seen, RSSI), relay state, timer value, event count, error conditions
 
-### CLI Configuration Interface (FR27-FR32)
+### CLI Configuration Interface (FR27-FR32) [DEFERRED TO V1.1]
+
+> **⚠️ DEFERRED:** Requirements FR27-FR32 have been moved to Post-MVP V1.1 per Sprint Change Proposal (2026-01-27).
+>
+> **Interim Solution:** All CLI functionality is accessible via direct serial terminal commands at 115200 baud. The firmware implements complete serial protocol (STATUS, REGISTER_SENSOR, SET_TIMER, TEST_RELAY, GET_EVENTS, GET_ERRORS, HELP) usable with PuTTY, screen, minicom, or Arduino Serial Monitor.
 
 - FR27: CLI can auto-detect ESP32-C3 serial port on common platforms (Windows, macOS, Linux) with manual selection fallback when multiple ports detected
 - FR28: CLI can communicate with firmware using text-based serial protocol (115200 baud, newline-terminated commands, JSON responses, defined error codes)

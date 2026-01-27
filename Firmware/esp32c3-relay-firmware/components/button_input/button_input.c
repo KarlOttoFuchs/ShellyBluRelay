@@ -2,12 +2,18 @@
  * Button Input Component - Implementation
  *
  * Story 1.3: Implement Button Input Detection (GPIO9)
+ * Story 1.7: Button Short-Press Detection
  *
  * Hardware Configuration:
  * - GPIO9 connected to tactile button S1 (160gf actuation)
  * - External pull-up: R6 = 10kΩ to 3.3V
  * - Active LOW: GPIO9 LOW = pressed, GPIO9 HIGH = released
  * - Strapping pin: LOW during reset enters download boot mode
+ *
+ * Press Duration Classification (Story 1.7):
+ *   < 500ms         SHORT PRESS  -> timer preset cycling
+ *   500ms - 2000ms  IGNORED      -> debounce zone
+ *   >= 2000ms       LONG PRESS   -> learning mode
  *
  * Debouncing Strategy:
  * - Read GPIO twice with 20ms delay between reads
@@ -40,9 +46,19 @@ static const char *TAG = "BUTTON_INPUT";
 // Track initialization state
 static bool button_initialized = false;
 
-// Long press detection state
+// Press type classification (Story 1.7)
+typedef enum {
+    PRESS_NONE,    // No press detected yet
+    PRESS_SHORT,   // < 500ms
+    PRESS_MEDIUM,  // 500-2000ms (ignored debounce zone)
+    PRESS_LONG     // >= 2000ms
+} press_type_t;
+
+// Button press detection state (shared between short and long press)
 static uint32_t button_press_start_ms = 0;
 static bool button_was_pressed = false;
+static press_type_t last_detected_press = PRESS_NONE;
+static bool press_consumed = false;  // Prevents double-detection
 
 /**
  * Read raw button state (no debouncing)
@@ -210,15 +226,18 @@ esp_err_t button_wait_for_release(uint32_t timeout_ms)
 }
 
 /**
- * Check for button long press (2 seconds)
+ * Update button state and classify press on release (Story 1.7)
  *
- * Non-blocking function that tracks button state across calls.
- * Returns true ONCE when button is released after being held for 2+ seconds.
+ * Internal function that tracks button state and classifies the press
+ * duration when the button is released. Called by both short and long
+ * press detection functions.
+ *
+ * @return The detected press type (PRESS_NONE if no release detected)
  */
-bool button_check_long_press(void)
+static press_type_t button_update_state(void)
 {
     if (!button_initialized) {
-        return false;
+        return PRESS_NONE;
     }
 
     // Read raw button state (active LOW)
@@ -226,31 +245,85 @@ bool button_check_long_press(void)
     uint32_t now_ms = (uint32_t)(esp_timer_get_time() / 1000);
 
     if (currently_pressed && !button_was_pressed) {
-        // Button just pressed - start timer
+        // Button just pressed - start timer, reset detection state
         button_press_start_ms = now_ms;
         button_was_pressed = true;
-        return false;
+        last_detected_press = PRESS_NONE;
+        press_consumed = false;
+        return PRESS_NONE;
     }
 
     if (!currently_pressed && button_was_pressed) {
-        // Button just released - check duration
+        // Button just released - classify press duration
         button_was_pressed = false;
         uint32_t duration = now_ms - button_press_start_ms;
 
-        if (duration >= BUTTON_LONG_PRESS_MS) {
+        if (duration < SHORT_PRESS_THRESHOLD_MS) {
+            last_detected_press = PRESS_SHORT;
+            ESP_LOGI(TAG, "Short press detected (%lu ms)", (unsigned long)duration);
+        } else if (duration < BUTTON_LONG_PRESS_MS) {
+            last_detected_press = PRESS_MEDIUM;
+            ESP_LOGD(TAG, "Medium press ignored (%lu ms)", (unsigned long)duration);
+        } else {
+            last_detected_press = PRESS_LONG;
             ESP_LOGI(TAG, "Long press detected (%lu ms)", (unsigned long)duration);
-            return true;
         }
+        return last_detected_press;
+    }
+
+    return PRESS_NONE;
+}
+
+/**
+ * Check for button short press (< 500ms) - Story 1.7
+ *
+ * Non-blocking function that tracks button state across calls.
+ * Returns true ONCE when button is released after being held for < 500ms.
+ * Must be called repeatedly in main loop for accurate detection.
+ */
+bool button_check_short_press(void)
+{
+    press_type_t press = button_update_state();
+
+    // Return true only once for a short press
+    if (press == PRESS_SHORT && !press_consumed) {
+        press_consumed = true;
+        return true;
     }
 
     return false;
 }
 
 /**
- * Reset long press detection state
+ * Check for button long press (>= 2000ms)
+ *
+ * Non-blocking function that tracks button state across calls.
+ * Returns true ONCE when button is released after being held for 2+ seconds.
+ * Must be called repeatedly in main loop for accurate detection.
+ */
+bool button_check_long_press(void)
+{
+    press_type_t press = button_update_state();
+
+    // Return true only once for a long press
+    if (press == PRESS_LONG && !press_consumed) {
+        press_consumed = true;
+        return true;
+    }
+
+    return false;
+}
+
+/**
+ * Reset button press detection state
+ *
+ * Resets internal tracking state for both short and long press detection.
+ * Call when entering a mode that should ignore any ongoing button press.
  */
 void button_reset_long_press(void)
 {
     button_press_start_ms = 0;
     button_was_pressed = false;
+    last_detected_press = PRESS_NONE;
+    press_consumed = false;
 }
