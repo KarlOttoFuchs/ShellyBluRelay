@@ -4,6 +4,8 @@ A BLE-enabled relay controller for home automation. Connect Shelly BLU sensors t
 
 ![ESP32C3 Relay Module PCB](Hardware/ESP32C3-Relay-Module-Rev-A/ESP32C3-Relay-Module-Rev-A.png)
 
+> **Note:** This project is provided as-is. No support, issues, or pull requests will be addressed.
+
 ## Features
 
 - **BTHome v2 sensor support** — Shelly BLU Button, Motion, and Door/Window sensors
