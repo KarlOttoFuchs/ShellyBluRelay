@@ -253,6 +253,12 @@ static press_type_t button_update_state(void)
         return PRESS_NONE;
     }
 
+    // If we already detected a press type this cycle, return it
+    // This allows multiple callers (short/long press checks) to see the same result
+    if (last_detected_press != PRESS_NONE) {
+        return last_detected_press;
+    }
+
     if (!currently_pressed && button_was_pressed) {
         // Button just released - classify press duration
         button_was_pressed = false;
