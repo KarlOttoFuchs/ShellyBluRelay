@@ -1,0 +1,565 @@
+# =============================================================================
+# ESP32-C3 Relay Module - ESPHome Configuration
+# =============================================================================
+#
+# ESPHome firmware for the ESP32-C3 Relay Module with Shelly BLU sensor support.
+# Direct local BLE trigger - no Home Assistant in the loop for relay control.
+#
+# Features:
+#   - Shelly BLU Button, Motion, Door/Window sensor support
+#   - Direct BLE-to-relay control (sub-second response)
+#   - Configurable auto-off timer with retrigger modes
+#   - Scanner mode for discovering BLU device MAC addresses
+#   - Battery monitoring for BLU sensors
+#   - Full Home Assistant integration for monitoring/configuration
+#
+# Hardware GPIO Mapping:
+#   - GPIO7:  Relay output (active HIGH, drives MOSFET)
+#   - GPIO10: Status LED (white, active HIGH)
+#   - GPIO0:  Error LED (red, active HIGH)
+#
+# =============================================================================
+
+# -----------------------------------------------------------------------------
+# SUBSTITUTIONS - Configure these for your setup
+# -----------------------------------------------------------------------------
+substitutions:
+  # Device identification
+  device_name: "esp32c3-relay"
+  friendly_name: "ESP32-C3 Relay"
+
+  # Shelly BLU device MAC address (required for operation)
+  # Format: XX:XX:XX:XX:XX:XX
+  # Find using scanner_mode or Shelly app
+  shelly_blu_mac: "00:00:00:00:00:00"
+
+  # Sensor type: "button", "motion", or "door"
+  sensor_type: "button"
+
+  # Scanner mode: "true" to discover devices, "false" for normal operation
+  # When enabled, logs all BTHome devices and disables relay control
+  scanner_mode: "false"
+
+  # Default timer duration in seconds (1-600)
+  default_timer: "300"
+
+  # Default retrigger mode: "extend" or "ignore"
+  # extend: New trigger resets timer countdown
+  # ignore: New triggers ignored while relay active
+  default_retrigger: "extend"
+
+# -----------------------------------------------------------------------------
+# ESPHOME CORE CONFIGURATION
+# -----------------------------------------------------------------------------
+esphome:
+  name: ${device_name}
+  friendly_name: ${friendly_name}
+
+  on_boot:
+    priority: 200
+    then:
+      - lambda: |-
+          // Initialize state based on configuration
+          bool is_unconfigured = (strcmp("${shelly_blu_mac}", "00:00:00:00:00:00") == 0);
+          bool is_scanner = (strcmp("${scanner_mode}", "true") == 0);
+
+          if (is_scanner) {
+            // Scanner mode - fast blink status LED
+            ESP_LOGI("boot", "Scanner mode enabled - logging BTHome devices");
+            id(led_error).turn_off();
+            auto call = id(led_status).turn_on();
+            call.set_effect("Fast Blink");
+            call.perform();
+          } else if (is_unconfigured) {
+            // Not configured - show error LED, status LED off
+            ESP_LOGW("boot", "Shelly BLU MAC not configured!");
+            id(led_error).turn_on();
+            id(led_status).turn_off();
+          } else {
+            // Normal operation - slow blink (listening)
+            ESP_LOGI("boot", "Configured for ${sensor_type} sensor: ${shelly_blu_mac}");
+            id(led_error).turn_off();
+            auto call = id(led_status).turn_on();
+            call.set_effect("Slow Blink");
+            call.perform();
+          }
+
+esp32:
+  board: esp32-c3-devkitm-1
+  framework:
+    type: esp-idf
+
+# -----------------------------------------------------------------------------
+# GLOBALS - State tracking
+# -----------------------------------------------------------------------------
+globals:
+  # Track if relay was turned on manually (vs sensor trigger)
+  - id: manual_control
+    type: bool
+    restore_value: no
+    initial_value: "false"
+
+  # Track if timer is currently running
+  - id: timer_active
+    type: bool
+    restore_value: no
+    initial_value: "false"
+
+  # Timer remaining seconds (for sensor display)
+  - id: timer_remaining_seconds
+    type: int
+    restore_value: no
+    initial_value: "0"
+
+  # Last sensor battery percentage
+  - id: sensor_battery_pct
+    type: int
+    restore_value: no
+    initial_value: "-1"
+
+  # Diagnostic: last event info
+  - id: last_event_mac_addr
+    type: std::string
+    restore_value: no
+    initial_value: '""'
+
+  - id: last_event_rssi_val
+    type: int
+    restore_value: no
+    initial_value: "-999"
+
+  - id: last_event_type_str
+    type: std::string
+    restore_value: no
+    initial_value: '""'
+
+# -----------------------------------------------------------------------------
+# CONNECTIVITY
+# -----------------------------------------------------------------------------
+wifi:
+  ssid: !secret wifi_ssid
+  password: !secret wifi_password
+
+  ap:
+    ssid: "${friendly_name} Setup"
+    password: "configure123"
+
+captive_portal:
+
+api:
+
+ota:
+  - platform: esphome
+    password: !secret ota_password
+
+# -----------------------------------------------------------------------------
+# LOGGING
+# -----------------------------------------------------------------------------
+logger:
+  level: INFO
+  logs:
+    esp32_ble_tracker: WARN
+
+# -----------------------------------------------------------------------------
+# BLUETOOTH LOW ENERGY - Shelly BLU Sensor Support
+# -----------------------------------------------------------------------------
+esp32_ble_tracker:
+  scan_parameters:
+    interval: 100ms
+    window: 50ms
+    active: false
+
+  on_ble_advertise:
+    - then:
+        - lambda: |-
+            // Skip processing if unconfigured (and not in scanner mode)
+            bool is_scanner = (strcmp("${scanner_mode}", "true") == 0);
+            bool is_unconfigured = (strcmp("${shelly_blu_mac}", "00:00:00:00:00:00") == 0);
+
+            if (!is_scanner && is_unconfigured) return;
+
+            // Get MAC address of this advertisement
+            char mac_str[18];
+            snprintf(mac_str, sizeof(mac_str), "%02X:%02X:%02X:%02X:%02X:%02X",
+                     x.address()[0], x.address()[1], x.address()[2],
+                     x.address()[3], x.address()[4], x.address()[5]);
+
+            // Parse BTHome v2 service data
+            for (auto &service_data : x.get_service_datas()) {
+              if (service_data.uuid.to_string() != "0xFCD2") continue;
+
+              auto data = service_data.data;
+              if (data.size() < 3) continue;
+
+              // Scanner mode: log all BTHome devices
+              if (is_scanner) {
+                // Detect device type from object IDs present
+                std::string device_type = "Unknown";
+                for (size_t i = 1; i < data.size() - 1; i++) {
+                  if (data[i] == 0x3A) { device_type = "Button"; break; }
+                  if (data[i] == 0x21) { device_type = "Motion"; break; }
+                  if (data[i] == 0x2D) { device_type = "Door/Window"; break; }
+                }
+                ESP_LOGI("SCANNER", "MAC: %s | RSSI: %d dBm | Type: %s",
+                         mac_str, x.get_rssi(), device_type.c_str());
+                return;  // Scanner mode does not trigger relay
+              }
+
+              // Normal operation: only process our configured device
+              std::string target_mac = "${shelly_blu_mac}";
+              std::string current_mac = mac_str;
+
+              // Case-insensitive MAC comparison
+              for (auto &c : target_mac) c = toupper(c);
+              for (auto &c : current_mac) c = toupper(c);
+
+              if (current_mac != target_mac) continue;
+
+              // Update diagnostic globals
+              id(last_event_mac_addr) = mac_str;
+              id(last_event_rssi_val) = x.get_rssi();
+
+              // Parse all BTHome objects
+              for (size_t i = 1; i < data.size() - 1; i++) {
+                uint8_t obj_id = data[i];
+
+                // Battery (0x01) - 1 byte percentage
+                if (obj_id == 0x01 && i + 1 < data.size()) {
+                  uint8_t battery = data[i + 1];
+                  id(sensor_battery_pct) = battery;
+
+                  // Battery low warning (<20%)
+                  if (battery < 20) {
+                    ESP_LOGW("shelly_blu", "Battery low: %d%%", battery);
+                    // Single blink on error LED
+                    id(led_error).turn_on();
+                    id(blink_error_led).execute();
+                  }
+                  i += 1;
+                  continue;
+                }
+
+                // Button event (0x3A) - 1 byte event type
+                if (obj_id == 0x3A && i + 1 < data.size()) {
+                  uint8_t event = data[i + 1];
+
+                  if (event == 0x01) {  // Single press
+                    id(last_event_type_str) = "button_single";
+                    ESP_LOGI("shelly_blu", "Button: single press");
+
+                    // Button single press = toggle (no timer)
+                    bool was_on = id(relay).state;
+                    id(relay).toggle();
+                    // Only set manual_control if we turned ON (not when toggling OFF)
+                    if (!was_on) {
+                      id(manual_control) = true;
+                    }
+                  }
+                  else if (event == 0x02) {  // Double press
+                    id(last_event_type_str) = "button_double";
+                    ESP_LOGI("shelly_blu", "Button: double press");
+                    // Customization point - add your action here
+                  }
+                  else if (event == 0x03) {  // Triple press
+                    id(last_event_type_str) = "button_triple";
+                    ESP_LOGI("shelly_blu", "Button: triple press");
+                    // Customization point - add your action here
+                  }
+                  else if (event == 0x04) {  // Long press
+                    id(last_event_type_str) = "button_long";
+                    ESP_LOGI("shelly_blu", "Button: long press");
+                    // Customization point - add your action here
+                  }
+                  else if (event == 0x80) {  // Hold
+                    id(last_event_type_str) = "button_hold";
+                    ESP_LOGI("shelly_blu", "Button: hold");
+                    // Customization point - add your action here
+                  }
+                  i += 1;
+                  continue;
+                }
+
+                // Motion event (0x21) - 1 byte state
+                if (obj_id == 0x21 && i + 1 < data.size()) {
+                  uint8_t motion = data[i + 1];
+
+                  if (motion == 0x01) {  // Motion detected
+                    id(last_event_type_str) = "motion_detected";
+                    ESP_LOGI("shelly_blu", "Motion: detected");
+
+                    // Skip if manually controlled
+                    if (id(manual_control) && id(relay).state) {
+                      ESP_LOGD("shelly_blu", "Skipping - manual override active");
+                    } else {
+                      // Check retrigger mode if already on
+                      if (id(relay).state && id(timer_active)) {
+                        std::string mode = id(retrigger_mode).state;
+                        if (mode == "ignore") {
+                          ESP_LOGD("shelly_blu", "Retrigger ignored");
+                        } else {
+                          // Extend - restart timer
+                          id(auto_off_timer).execute();
+                        }
+                      } else {
+                        // Turn on and start timer
+                        id(manual_control) = false;
+                        id(relay).turn_on();
+                        id(auto_off_timer).execute();
+                      }
+                    }
+                  } else {  // Motion clear
+                    id(last_event_type_str) = "motion_clear";
+                    ESP_LOGD("shelly_blu", "Motion: clear");
+                    // Timer handles off - no action needed
+                  }
+                  i += 1;
+                  continue;
+                }
+
+                // Door/Window event (0x2D) - 1 byte state
+                if (obj_id == 0x2D && i + 1 < data.size()) {
+                  uint8_t door = data[i + 1];
+
+                  if (door == 0x01) {  // Opened
+                    id(last_event_type_str) = "door_opened";
+                    ESP_LOGI("shelly_blu", "Door/Window: opened");
+
+                    // Skip if manually controlled
+                    if (id(manual_control) && id(relay).state) {
+                      ESP_LOGD("shelly_blu", "Skipping - manual override active");
+                    } else {
+                      // Check retrigger mode if already on
+                      if (id(relay).state && id(timer_active)) {
+                        std::string mode = id(retrigger_mode).state;
+                        if (mode == "ignore") {
+                          ESP_LOGD("shelly_blu", "Retrigger ignored");
+                        } else {
+                          id(auto_off_timer).execute();
+                        }
+                      } else {
+                        id(manual_control) = false;
+                        id(relay).turn_on();
+                        id(auto_off_timer).execute();
+                      }
+                    }
+                  } else {  // Closed
+                    id(last_event_type_str) = "door_closed";
+                    ESP_LOGD("shelly_blu", "Door/Window: closed");
+                    // Customization point - add your action here
+                  }
+                  i += 1;
+                  continue;
+                }
+              }
+            }
+
+# -----------------------------------------------------------------------------
+# SCRIPTS - Timer and LED control
+# -----------------------------------------------------------------------------
+script:
+  # Auto-off timer script
+  - id: auto_off_timer
+    mode: restart  # Restart allows extending the timer
+    then:
+      - lambda: |-
+          id(timer_active) = true;
+          id(timer_remaining_seconds) = (int)id(timer_duration).state;
+      - while:
+          condition:
+            lambda: "return id(timer_remaining_seconds) > 0;"
+          then:
+            - delay: 1s
+            - lambda: "id(timer_remaining_seconds) -= 1;"
+      - lambda: "id(timer_active) = false;"
+      - switch.turn_off: relay
+
+  # Single blink error LED (for battery low warning)
+  - id: blink_error_led
+    mode: single
+    then:
+      - delay: 200ms
+      - light.turn_off: led_error
+
+# -----------------------------------------------------------------------------
+# RELAY SWITCH
+# -----------------------------------------------------------------------------
+switch:
+  - platform: gpio
+    name: "Relay"
+    id: relay
+    pin:
+      number: GPIO7
+      mode: output
+    restore_mode: ALWAYS_OFF
+
+    on_turn_on:
+      - lambda: |-
+          // If turned on via HA (not from BLE trigger), mark as manual
+          // BLE triggers set manual_control before calling turn_on
+          // HA API calls don't, so we detect it here
+          if (!id(timer_active) && !id(manual_control)) {
+            id(manual_control) = true;
+          }
+      - light.turn_on:
+          id: led_status
+          effect: "Solid"
+
+    on_turn_off:
+      - lambda: |-
+          id(manual_control) = false;
+          id(timer_active) = false;
+          id(timer_remaining_seconds) = 0;
+      - script.stop: auto_off_timer
+      - light.turn_on:
+          id: led_status
+          effect: "Slow Blink"
+
+# -----------------------------------------------------------------------------
+# CONFIGURATION ENTITIES
+# -----------------------------------------------------------------------------
+number:
+  - platform: template
+    name: "Timer Duration"
+    id: timer_duration
+    icon: "mdi:timer-outline"
+    unit_of_measurement: "s"
+    min_value: 1
+    max_value: 600
+    step: 1
+    initial_value: ${default_timer}
+    restore_value: true
+    optimistic: true
+
+select:
+  - platform: template
+    name: "Retrigger Mode"
+    id: retrigger_mode
+    icon: "mdi:replay"
+    options:
+      - "extend"
+      - "ignore"
+    initial_option: ${default_retrigger}
+    restore_value: true
+    optimistic: true
+
+# -----------------------------------------------------------------------------
+# LED INDICATORS
+# -----------------------------------------------------------------------------
+light:
+  - platform: binary
+    name: "Status LED"
+    id: led_status
+    output: led_status_output
+    internal: true
+    effects:
+      - strobe:
+          name: "Slow Blink"
+          colors:
+            - state: true
+              duration: 1000ms
+            - state: false
+              duration: 1000ms
+      - strobe:
+          name: "Fast Blink"
+          colors:
+            - state: true
+              duration: 200ms
+            - state: false
+              duration: 200ms
+      - lambda:
+          name: "Solid"
+          update_interval: 1000ms
+          lambda: |-
+            auto call = id(led_status).turn_on();
+            call.set_brightness(1.0);
+            call.perform();
+
+  - platform: binary
+    name: "Error LED"
+    id: led_error
+    output: led_error_output
+    internal: true
+
+output:
+  - platform: gpio
+    id: led_status_output
+    pin:
+      number: GPIO10
+      mode: output
+
+  - platform: gpio
+    id: led_error_output
+    pin:
+      number: GPIO0
+      mode: output
+
+# -----------------------------------------------------------------------------
+# SENSORS - Diagnostics and Monitoring
+# -----------------------------------------------------------------------------
+sensor:
+  - platform: wifi_signal
+    name: "WiFi Signal"
+    update_interval: 60s
+
+  - platform: uptime
+    name: "Uptime"
+    update_interval: 60s
+
+  - platform: template
+    name: "Timer Remaining"
+    id: timer_remaining
+    icon: "mdi:timer-sand"
+    unit_of_measurement: "s"
+    accuracy_decimals: 0
+    update_interval: 1s
+    lambda: "return id(timer_remaining_seconds);"
+
+  - platform: template
+    name: "Sensor Battery"
+    id: sensor_battery
+    icon: "mdi:battery-bluetooth"
+    unit_of_measurement: "%"
+    device_class: battery
+    accuracy_decimals: 0
+    update_interval: 60s
+    lambda: |-
+      if (id(sensor_battery_pct) < 0) return NAN;
+      return (float)id(sensor_battery_pct);
+
+  - platform: template
+    name: "Last Event RSSI"
+    id: last_rssi
+    icon: "mdi:signal"
+    unit_of_measurement: "dBm"
+    device_class: signal_strength
+    accuracy_decimals: 0
+    entity_category: diagnostic
+    update_interval: 5s
+    lambda: |-
+      if (id(last_event_rssi_val) == -999) return NAN;
+      return (float)id(last_event_rssi_val);
+
+text_sensor:
+  - platform: template
+    name: "Last Event MAC"
+    id: last_mac
+    icon: "mdi:bluetooth"
+    entity_category: diagnostic
+    update_interval: 5s
+    lambda: 'return id(last_event_mac_addr);'
+
+  - platform: template
+    name: "Last Event Type"
+    id: last_event
+    icon: "mdi:gesture-tap"
+    entity_category: diagnostic
+    update_interval: 5s
+    lambda: 'return id(last_event_type_str);'
+
+binary_sensor:
+  - platform: status
+    name: "Status"
+
+button:
+  - platform: restart
+    name: "Restart"

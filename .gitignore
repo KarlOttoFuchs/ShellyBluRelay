@@ -50,6 +50,10 @@ build/
 .vscode/
 .idea/
 
+# ESPHome secrets (NEVER commit credentials!)
+ESPHome/secrets.yaml
+secrets.yaml
+
 # Python
 __pycache__/
 *.py[cod]
