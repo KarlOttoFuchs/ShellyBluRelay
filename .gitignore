@@ -20,6 +20,9 @@ _autosave-*
 *-save.kicad_pcb
 fp-info-cache
 
+# FreeCAD backup files (written on every save)
+*.FCBak
+
 # KiCad netlist and autorouter files
 *.net
 *.dsn
