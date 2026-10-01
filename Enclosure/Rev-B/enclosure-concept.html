@@ -1,0 +1,330 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Rev B Enclosure Concept</title>
+<style>
+  :root {
+    --bg: #fbfaf7; --fg: #1f2328; --muted: #5d6670; --line: #2b3137; --rule: #d9d6cf;
+    --tube: #e6e1d6; --cap: #c9d6e3; --pcb: #5f9e6e; --part: #8b949e; --conn: #a3a8ae;
+    --keep: #d1495b; --ant: #2f74c0; --accent: #b4561f; --panel: #f2efe8;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --bg: #16191d; --fg: #e6e8eb; --muted: #9aa3ad; --line: #c9ced4; --rule: #30353b;
+      --tube: #3a3832; --cap: #2c3a48; --pcb: #3f7a4f; --part: #6b737c; --conn: #59606a;
+      --keep: #e0707f; --ant: #6aa6e8; --accent: #e08a4f; --panel: #1e2227;
+    }
+  }
+  :root[data-theme="dark"] {
+    --bg: #16191d; --fg: #e6e8eb; --muted: #9aa3ad; --line: #c9ced4; --rule: #30353b;
+    --tube: #3a3832; --cap: #2c3a48; --pcb: #3f7a4f; --part: #6b737c; --conn: #59606a;
+    --keep: #e0707f; --ant: #6aa6e8; --accent: #e08a4f; --panel: #1e2227;
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--fg);
+         font: 15px/1.55 system-ui, -apple-system, "Segoe UI", sans-serif; }
+  main { max-width: 980px; margin: 0 auto; padding: 28px 16px 64px; }
+  h1 { font-size: 1.6rem; margin: 0 0 4px; }
+  h2 { font-size: 1.1rem; margin: 36px 0 8px; padding-top: 12px; border-top: 1px solid var(--rule); }
+  .sub { color: var(--muted); margin: 0 0 20px; }
+  figure { margin: 12px 0 4px; background: var(--panel); border-radius: 8px; padding: 10px; }
+  figcaption { color: var(--muted); font-size: 0.85rem; margin-top: 6px; }
+  svg { width: 100%; height: auto; display: block; }
+  svg text { fill: var(--fg); font-family: system-ui, sans-serif; }
+  .lbl { font-size: 2.1px; } .small { font-size: 1.7px; fill: var(--muted); }
+  .ln { stroke: var(--line); stroke-width: 0.22; fill: none; }
+  .hid { stroke: var(--line); stroke-width: 0.18; fill: none; stroke-dasharray: 0.8 0.6; }
+  .tube { fill: var(--tube); stroke: var(--line); stroke-width: 0.22; }
+  .cap { fill: var(--cap); stroke: var(--line); stroke-width: 0.22; fill-opacity: 0.85; }
+  .pcb { fill: var(--pcb); stroke: var(--line); stroke-width: 0.18; }
+  .part { fill: var(--part); stroke: var(--line); stroke-width: 0.15; }
+  .conn { fill: var(--conn); stroke: var(--line); stroke-width: 0.15; }
+  .keep { fill: var(--keep); fill-opacity: 0.28; stroke: var(--keep); stroke-width: 0.18; }
+  .ant { fill: var(--ant); fill-opacity: 0.3; stroke: var(--ant); stroke-width: 0.18; }
+  .cable { stroke: var(--accent); stroke-width: 1.4; fill: none; stroke-linecap: round; }
+  .wire { stroke: var(--accent); stroke-width: 0.5; fill: none; }
+  .hole { fill: var(--bg); stroke: var(--line); stroke-width: 0.18; }
+  .arrow { stroke: var(--accent); stroke-width: 0.3; fill: none; marker-end: url(#ah); }
+  table { border-collapse: collapse; width: 100%; font-size: 0.9rem; }
+  th, td { text-align: left; padding: 6px 8px; border-bottom: 1px solid var(--rule); vertical-align: top; }
+  th { color: var(--muted); font-weight: 600; }
+  .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+  @media (max-width: 720px) { .grid { grid-template-columns: 1fr; } }
+  ol li, ul li { margin: 4px 0; }
+  code { font-size: 0.88em; }
+  .tag { display: inline-block; font-size: 0.75rem; padding: 1px 7px; border-radius: 10px;
+         background: var(--panel); border: 1px solid var(--rule); color: var(--muted); }
+  .wrap { overflow-x: auto; }
+</style>
+</head>
+<body>
+<main>
+<h1>Rev B Enclosure Concept</h1>
+<p class="sub">ESP32-C3 LED controller, inline tube enclosure &middot; concept sketch, 2026-10-01 &middot;
+model: <code>enclosure_rev_b.py</code> (FreeCAD 1.1, parametric) &middot; all dimensions mm</p>
+
+<p>An inline stick that sits in the 24 V cable run between the always-on PSU at the back of the
+counter and the COB strip at the front lip. The board slides into a printed tube on rails;
+two end caps carry the cable entry, strain relief and a centred screw tab, and click onto the tube with
+snap detents. No screws or inserts: once mounted, the two tab screws fix the caps to the
+cabinet and the tube is trapped between them. <span class="tag">Tube 66.4 &times; 24.2 &times; 12.2</span>
+<span class="tag">Overall 119.4 (with end tabs) &times; 27.8 &times; 15.8</span> <span class="tag">2 identical caps</span></p>
+
+<h2>Top view &mdash; component side (faces down into the room when mounted)</h2>
+<figure>
+<svg viewBox="-39 -5 141 39" role="img" aria-label="Top view of tube, caps, board layout zones and keep-outs">
+  <defs>
+    <marker id="ah" viewBox="0 0 6 6" refX="5" refY="3" markerWidth="3" markerHeight="3" orient="auto">
+      <path d="M0,0 L6,3 L0,6 z" fill="var(--accent)"/>
+    </marker>
+  </defs>
+  <!-- tube -->
+  <rect class="tube" x="0" y="0" width="66.4" height="24.2"/>
+  <!-- board -->
+  <rect class="pcb" x="0.2" y="2.1" width="66" height="20" fill-opacity="0.55"/>
+  <!-- hold-down ribs (board top-side keep-out strips) -->
+  <rect class="keep" x="0" y="1.8" width="10" height="1.0"/>
+  <rect class="keep" x="0" y="21.4" width="10" height="1.0"/>
+  <rect class="keep" x="56.4" y="1.8" width="10" height="1.0"/>
+  <rect class="keep" x="56.4" y="21.4" width="10" height="1.0"/>
+  <!-- snap detent grooves on the tube faces -->
+  <path class="ln" d="M3,0 A1,1 0 0 0 5,0"/>
+  <path class="ln" d="M3,24.2 A1,1 0 0 1 5,24.2"/>
+  <path class="ln" d="M61.4,0 A1,1 0 0 0 63.4,0"/>
+  <path class="ln" d="M61.4,24.2 A1,1 0 0 1 63.4,24.2"/>
+  <!-- zones -->
+  <rect class="conn" x="0.2" y="8.15" width="11.5" height="7.9"/>
+  <rect class="conn" x="54.7" y="8.15" width="11.5" height="7.9"/>
+  <rect class="hid" x="12.7" y="2.6" width="8" height="19"/>
+  <rect class="hid" x="20.7" y="2.6" width="9.5" height="19"/>
+  <rect class="part" x="23" y="10" width="4.4" height="4.2"/>
+  <g>
+    <circle class="hole" cx="32" cy="6.4" r="0.55"/><circle class="hole" cx="32" cy="8.94" r="0.55"/>
+    <circle class="hole" cx="32" cy="11.48" r="0.55"/><circle class="hole" cx="32" cy="14.02" r="0.55"/>
+  </g>
+  <rect class="part" x="34.2" y="5.5" width="13.2" height="16.6"/>
+  <rect class="ant" x="34.2" y="16.6" width="13.2" height="5.5"/>
+  <rect class="hid" x="47.7" y="2.6" width="6.6" height="19"/>
+  <rect class="part" x="49.7" y="4.1" width="3" height="4"/>
+  <circle class="hole" cx="51.2" cy="6.1" r="0.8"/>
+  <circle class="part" cx="51.2" cy="18.1" r="1.0"/>
+  <!-- caps -->
+  <rect class="cap" x="-14.5" y="-1.8" width="22.5" height="27.8"/>
+  <rect class="cap" x="58.4" y="-1.8" width="22.5" height="27.8"/>
+  <!-- end tabs (screw ears), centred under the cable, flush with the mounting face -->
+  <path class="cap" d="M-14.5,6.1 H-20.5 A6,6 0 0 0 -20.5,18.1 H-14.5 Z"/>
+  <path class="cap" d="M80.9,6.1 H86.9 A6,6 0 0 1 86.9,18.1 H80.9 Z"/>
+  <rect class="cap" x="-17.5" y="6.1" width="3" height="2"/>
+  <rect class="cap" x="-17.5" y="16.1" width="3" height="2"/>
+  <rect class="cap" x="80.9" y="6.1" width="3" height="2"/>
+  <rect class="cap" x="80.9" y="16.1" width="3" height="2"/>
+  <circle class="hid" cx="-20.5" cy="12.1" r="3.6"/><circle class="hole" cx="-20.5" cy="12.1" r="1.8"/>
+  <circle class="hid" cx="86.9" cy="12.1" r="3.6"/><circle class="hole" cx="86.9" cy="12.1" r="1.8"/>
+  <!-- snap detents (both sides, both ends) -->
+  <line class="arrow" x1="4" y1="-4.6" x2="4" y2="-2"/>
+  <line class="arrow" x1="62.4" y1="-4.6" x2="62.4" y2="-2"/>
+  <!-- cables (run over the tab and hide the screw head) -->
+  <line class="cable" x1="-37" y1="12.1" x2="-14.5" y2="12.1" stroke-opacity="0.7"/>
+  <line class="cable" x1="80.9" y1="12.1" x2="100" y2="12.1" stroke-opacity="0.7"/>
+  <!-- labels -->
+  <text class="lbl" x="-37" y="4.6">from PSU</text>
+  <text class="lbl" x="93" y="4.6">to strip</text>
+  <text class="small" x="-28" y="21.6">screw tab</text>
+  <text class="small" x="81" y="21.6">screw tab</text>
+  <text class="small" x="-13.6" y="23.8">CAP IN</text>
+  <text class="small" x="69.6" y="23.8">CAP OUT</text>
+  <text class="small" x="0.8" y="12.6">IN conn</text>
+  <text class="small" x="55.3" y="12.6">OUT conn</text>
+  <text class="small" x="13" y="20.6">protect</text>
+  <text class="small" x="21.2" y="20.6">buck 3V3</text>
+  <text class="small" x="30.6" y="16.4">hdr</text>
+  <text class="small" x="35" y="9.6">ESP32-C3</text>
+  <text class="small" x="35" y="11.4">MINI-1</text>
+  <text class="small" x="35" y="20.4">antenna</text>
+  <text class="small" x="48" y="3.8">output</text>
+  <text class="small" x="53" y="6.6">btn</text>
+  <text class="small" x="53" y="18.6">LED</text>
+  <text class="small" x="-5.6" y="-3.2">snap detent</text>
+  <text class="small" x="53.4" y="-3.2">snap detent</text>
+  <text class="lbl" x="22" y="31.5" fill="var(--ant)" style="fill:var(--ant)">+Y: antenna side &rarr; face open space</text>
+  <text class="lbl" x="22" y="-2.4">&minus;Y side</text>
+</svg>
+<figcaption>Red: hold-down ribs, 1 mm wide &times; 10 mm at each end of both long walls; they
+overlap the board edge by 0.7 mm, so keep the top side clear within 1.5 mm of the long edges over
+the last 10 mm. Snap detents (ridge in the cap, groove in the tube) on both faces at both
+ends, 4 mm in from the tube end. Blue: module
+antenna end, flush with the board's +Y edge, no copper beyond it. Board zones are the planned
+placement order IN &rarr; protection &rarr; buck &rarr; header &rarr; module &rarr; output &rarr; OUT;
+exact positions come from the KiCad layout.</figcaption>
+</figure>
+
+<h2>Side section &mdash; through the centre line</h2>
+<figure>
+<svg viewBox="-39 -6 141 30" role="img" aria-label="Side section through tube and caps">
+  <g transform="translate(0,16) scale(1,-1)">
+    <!-- tube walls -->
+    <rect class="tube" x="0" y="0" width="66.4" height="1.8"/>
+    <rect class="tube" x="0" y="10.4" width="66.4" height="1.8"/>
+    <!-- pin-hole gap in top wall -->
+    <rect x="50.4" y="10.35" width="1.6" height="1.9" fill="var(--panel)"/>
+    <!-- hold-down ribs (on the side walls, behind section plane) -->
+    <rect class="hid" x="0" y="5.1" width="10" height="5.3"/>
+    <rect class="hid" x="56.4" y="5.1" width="10" height="5.3"/>
+    <!-- board and parts -->
+    <rect class="pcb" x="0.2" y="3.3" width="66" height="1.6"/>
+    <rect class="conn" x="0.2" y="4.9" width="11.5" height="4.5"/>
+    <rect class="conn" x="54.7" y="4.9" width="11.5" height="4.5"/>
+    <rect class="part" x="23" y="4.9" width="4.4" height="2"/>
+    <rect class="part" x="34.2" y="4.9" width="13.2" height="2.4"/>
+    <rect class="part" x="49.7" y="4.9" width="3" height="1.6"/>
+    <!-- caps (section): plate with cable hole, top + bottom walls -->
+    <path class="cap" d="M-14.5,-1.8 H8 V-0.2 H-12 V3.9 H-14.5 Z"/>
+    <path class="cap" d="M-14.5,10.4 H-12 V12.4 H8 V14.0 H-14.5 Z"/>
+    <path class="cap" d="M80.9,-1.8 H58.4 V-0.2 H78.4 V3.9 H80.9 Z"/>
+    <path class="cap" d="M80.9,10.4 H78.4 V12.4 H58.4 V14.0 H80.9 Z"/>
+    <!-- stop ribs (at the sides, behind section) -->
+    <rect class="hid" x="-1.5" y="-0.2" width="1.5" height="12.6"/>
+    <rect class="hid" x="66.4" y="-0.2" width="1.5" height="12.6"/>
+    <!-- cables: jacket to mid-chamber, conductors to connector -->
+    <line class="cable" x1="-37" y1="7.15" x2="-6" y2="7.15"/>
+    <path class="wire" d="M-6,7.4 C-3,7.4 -2,7.6 0.2,7.6"/>
+    <path class="wire" d="M-6,6.9 C-3,6.9 -2,6.7 0.2,6.7"/>
+    <line class="cable" x1="80.9" y1="7.15" x2="100" y2="7.15"/>
+    <path class="wire" d="M72.4,7.4 C69.4,7.4 68.4,7.6 66.2,7.6"/>
+    <path class="wire" d="M72.4,6.9 C69.4,6.9 68.4,6.7 66.2,6.7"/>
+    <line class="cable" x1="72.4" y1="7.15" x2="80.9" y2="7.15"/>
+    <!-- tie-stop -->
+    <rect x="-8.2" y="5.3" width="1.4" height="3.7" fill="var(--accent)" fill-opacity="0.7"/>
+    <rect x="73.6" y="5.3" width="1.4" height="3.7" fill="var(--accent)" fill-opacity="0.7"/>
+    <!-- mounting surface -->
+    <line class="ln" x1="-37" y1="-1.8" x2="100" y2="-1.8" stroke-dasharray="2 1"/>
+    <!-- end tabs with gussets; countersunk wood screw under the cable -->
+    <path class="cap" d="M-14.5,-1.8 H-26.5 V1.2 H-17.5 L-14.5,4.2 Z"/>
+    <path class="cap" d="M80.9,-1.8 H92.9 V1.2 H83.9 L80.9,4.2 Z"/>
+    <line class="hid" x1="-20.5" y1="-4" x2="-20.5" y2="1.2"/>
+    <line class="hid" x1="86.9" y1="-4" x2="86.9" y2="1.2"/>
+  </g>
+  <!-- leader lines to the label rows above and below the drawing -->
+  <g class="hid">
+    <line x1="-9" y1="-3.2" x2="-9" y2="1.9"/>
+    <line x1="6" y1="-3.2" x2="6" y2="6.4"/>
+    <line x1="37" y1="-3.2" x2="37" y2="8.5"/>
+    <line x1="51.2" y1="-3.2" x2="51.2" y2="3.7"/>
+    <line x1="-7.5" y1="19.2" x2="-7.5" y2="10.8"/>
+    <line x1="30" y1="19.2" x2="30" y2="12.9"/>
+  </g>
+  <text class="small" x="-22" y="-3.8">cable chamber 12</text>
+  <text class="small" x="2" y="-3.8">conn 4.5</text>
+  <text class="small" x="33" y="-3.8">module 2.4</text>
+  <text class="small" x="49" y="-3.8">pin-hole &rarr; button</text>
+  <text class="small" x="-11" y="20.4">tie-stop</text>
+  <text class="small" x="24" y="20.4">board on rails, 1.5 air gap below</text>
+  <line class="hid" x1="-20.5" y1="19.2" x2="-20.5" y2="15.4"/>
+  <text class="small" x="-30" y="20.4">screw tab</text>
+  <text class="small" x="-36" y="23.2">- - cabinet underside (mounting face; only the caps touch it)</text>
+</svg>
+<figcaption>Drawn in model orientation (component side up). Installed, the unit hangs under the
+cabinet with this view upside-down: pin-hole and LED window face down into the room.
+Headroom above the board is 5.5 against the tallest part (the 4.5 connectors).</figcaption>
+</figure>
+
+<div class="grid">
+<div>
+<h2>End section &mdash; at the detent (x = 4)</h2>
+<figure>
+<svg viewBox="-4 -6 42 29" role="img" aria-label="End section through tube and cap at the snap detent">
+  <g transform="translate(0,16) scale(1,-1)">
+    <!-- cap sleeve -->
+    <path class="cap" fill-rule="evenodd"
+          d="M-1.8,-1.8 H26 V14.0 H-1.8 Z M-0.2,-0.2 V12.4 H24.4 V-0.2 Z"/>
+    <!-- tube with detent grooves -->
+    <path class="tube" fill-rule="evenodd"
+          d="M0,0 H24.2 V12.2 H0 Z M1.8,1.8 V10.4 H22.4 V1.8 Z"/>
+    <rect class="tube" x="1.8" y="1.8" width="1.2" height="1.5"/>
+    <rect class="tube" x="21.2" y="1.8" width="1.2" height="1.5"/>
+    <rect class="tube" x="1.8" y="5.1" width="1.0" height="5.3"/>
+    <rect class="tube" x="21.4" y="5.1" width="1.0" height="5.3"/>
+    <!-- snap ridges (cap) seated in grooves (tube) -->
+    <rect class="cap" x="-0.2" y="3.1" width="0.6" height="6" style="fill-opacity:1"/>
+    <rect class="cap" x="23.8" y="3.1" width="0.6" height="6" style="fill-opacity:1"/>
+    <rect class="pcb" x="2.1" y="3.3" width="20" height="1.6"/>
+    <rect class="conn" x="8.15" y="4.9" width="7.9" height="4.5"/>
+    <rect class="hid" x="6.1" y="-1.8" width="12" height="3"/>
+  </g>
+  <g class="hid">
+    <line x1="0.1" y1="-1.4" x2="0.1" y2="8"/>
+    <line x1="22" y1="-4" x2="22" y2="6.5"/>
+    <line x1="2.4" y1="20.2" x2="2.4" y2="13.6"/>
+  </g>
+  <text class="small" x="-3.6" y="-2">snap ridge in cap &rarr; groove in tube</text>
+  <text class="small" x="13" y="-4.6">hold-down rib</text>
+  <text class="small" x="26.6" y="18.6">tab (behind)</text>
+  <text class="small" x="0.6" y="21.6">rails 1.2 &times; 1.5 under the board</text>
+</svg>
+<figcaption>The cap sleeve (1.6 wall, 0.2 clearance) carries a half-round ridge, R1.0 &times; 6 long,
+on each side; it reaches 0.4 into a matching groove in the tube wall and clicks in when the
+tube end meets the cap's stop ribs. Hold-down ribs above the board edge stop it lifting.</figcaption>
+</figure>
+</div>
+<div>
+<h2>Key dimensions</h2>
+<table>
+<tr><th>Item</th><th>Value</th></tr>
+<tr><td>Board (placeholder)</td><td>66 &times; 20 &times; 1.6</td></tr>
+<tr><td>Tube wall / clearances</td><td>1.8 wall; 0.3 side; 0.2 axial; 0.2 over board</td></tr>
+<tr><td>Headroom over board</td><td>5.5 (conn 4.5, module 2.4)</td></tr>
+<tr><td>Board keep-out</td><td>Top side within 1.5 of both long edges, last 10 at each end</td></tr>
+<tr><td>Cap</td><td>8 sleeve + 12 chamber + 2.5 plate; cable hole &oslash;6.5</td></tr>
+<tr><td>Snap detents</td><td>Half-round R1.0 &times; 6, 0.4 engagement, both sides, 4 from tube ends</td></tr>
+<tr><td>End tabs (ears)</td><td>Centred under the cable: 12 wide &times; 3, R6 end, &oslash;3.6 + countersink 6 beyond the end face, two 3 mm gussets</td></tr>
+<tr><td>Caps</td><td>IN and OUT are the same part (OUT = IN turned 180&deg;): print <code>Enclosure_Rev_B_Cap.stl</code> twice</td></tr>
+<tr><td>Pin-hole / LED window</td><td>&oslash;1.6 over button / &oslash;3.2 over LED</td></tr>
+<tr><td>Connector</td><td>HDGC4001SMD-S-2P: 7.9 &times; 11.5 &times; 4.5 (datasheet)</td></tr>
+</table>
+</div>
+</div>
+
+<h2>Assembly order</h2>
+<ol>
+  <li>Thread the strip cable through CAP OUT, then through the tube from the OUT end.</li>
+  <li>Thread the PSU cable through CAP IN. Strip both jackets ~10 mm inside where each cap
+      chamber will be, and fit a cable tie tight on each jacket as the tie-stop.</li>
+  <li>Push the conductors into both connectors with the board outside the IN end.</li>
+  <li>Slide the board into the tube from the IN end, drawing the strip cable back.</li>
+  <li>Push both caps on until they click (tube ends against the stop ribs).</li>
+  <li>Hold each cable aside, drive a countersunk wood screw through each end tab, then let
+      the cable lie back over the screw head. Antenna (+Y) side facing open space. The two
+      wood screws now hold everything; the detents only matter off the cabinet.</li>
+</ol>
+<p>Bench access: pull CAP IN off by hand and slide the board out; either release the OUT wires
+or leave enough slack to pull the board clear with the strip cable still attached.</p>
+
+<h2>Printing</h2>
+<ul>
+  <li>PETG, not PLA (kitchen heat). 0.2 mm layers, 3 perimeters so the detent grooves keep a
+      solid wall behind them.</li>
+  <li>Tube: print upright (axis vertical). Rails and hold-down ribs grow straight off the
+      walls, so no supports.</li>
+  <li>Caps (2 &times; the same STL): print on the mounting face, tab flat on the bed, so the
+      tab layers run along its length and the countersink prints upright. The cap roof
+      bridges ~25 mm; print a bridge test first if unsure of your PETG settings.</li>
+  <li>LED window: leave open, fill with clear resin, or print the tube in natural PETG and
+      reduce the window to a 0.6 mm skin.</li>
+</ul>
+
+<h2>Open before the board is laid out</h2>
+<table>
+<tr><th>Item</th><th>Why it matters</th></tr>
+<tr><td>Real board outline and button/LED positions</td><td>Update <code>PCB_*</code>, <code>BUTTON_XY</code>, <code>LED_XY</code> and re-run the script.</td></tr>
+<tr><td>Button height and travel (TS-1088-AR02016)</td><td>Sets how far a paper clip must reach through the 1.8 wall; datasheet not yet read.</td></tr>
+<tr><td>Connector wire-entry height</td><td>Estimated 2.25 above the board; sets the cable-hole height.</td></tr>
+<tr><td>Cable OD</td><td>Hole is &oslash;6.5 for round twin cable up to ~6 mm.</td></tr>
+<tr><td>Detent click force</td><td>0.4 engagement is a starting point; tune <code>DET_ENGAGE</code> (0.3&ndash;0.5) after a test print.</td></tr>
+<tr><td>Component height</td><td>Nothing on the board may exceed the 4.5 mm connectors (headroom 5.5). The input e-cap was dropped for this.</td></tr>
+<tr><td>Test print</td><td>Check rail fit and sleeve clearance before the PCB order.</td></tr>
+</table>
+</main>
+</body>
+</html>
