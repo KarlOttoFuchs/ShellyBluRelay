@@ -16,8 +16,7 @@ Last updated: 2026-10-02
   (DEC-09…DEC-12), connectors, USB, UI and enclosure (DEC-13…DEC-16). Concept review register:
   [`reviews/schematic-2026-10-02-rev-b-concept.md`](reviews/schematic-2026-10-02-rev-b-concept.md)
   (no open Blocker or Major).
-- **Open questions:** the supply's overcurrent behaviour (not published; bench test in §10); SS34 voltage margin, thermal-fallback effectiveness and low-end PWM
-  linearity (open register rows).
+- **Open questions:** the supply's overcurrent behaviour (not published; bench test in §10); low-end PWM linearity (open register row).
 - **Blocked on:** —
 - **Next:** draw the schematic in
   `Hardware/FEHA-LSC-001-01-Controller-Rev-A/`.
@@ -108,7 +107,7 @@ Not applicable: no sensors on the board. Triggers arrive over BLE.
 
 ## 5. ADC / measurement
 
-Not applicable. Thermal fallback uses the ESP32-C3 internal temperature sensor (§8).
+Not applicable. The thermal fault cut-off uses the ESP32-C3 internal temperature sensor (§8).
 
 ## 6. MCU and interfaces
 
@@ -129,7 +128,9 @@ glitch at power-up), GPIO20/21 (UART, pulled up), GPIO2/8/9 (strapping pins).
   MOSFET.
 - **Gate network** (DEC-04): 100 Ω series (≈ 55–60 ns drain edges), 10 kΩ pull-down to source
   (holds the gate low even against an internal 45 kΩ pull-up), GPIO at maximum drive strength.
-- **Freewheel** (DEC-05): SS34 Schottky across the strip, cathode to LED+ (DC-only output).
+- **Freewheel** (DEC-05): SS34 Schottky across the strip, cathode to LED+ (DC-only output). With
+  the MOSFET on it blocks the full rail: 24 V is 60 % of its 40 V rating, and with hot-plug waived
+  (DEC-11) and a surge-protected supply the rail stays below the TVS's 28.9 V breakdown (DEC-22).
 - **Local bypass** (DEC-05): 1 µF 50 V X7R 0805 from +24 V to GND at the output stage, supplying
   the turn-on current edge locally.
 - **PWM** (DEC-06): 19.5 kHz, 12-bit LEDC; full brightness is a static high, never 99.x %.
@@ -212,8 +213,10 @@ ESPHome (see `ESPHome/` in this repo). Hardware/firmware contract:
 
 - PWM on GPIO7, 19.5 kHz, 12-bit LEDC, `GPIO_DRIVE_CAP_3`; full brightness = static high.
 - A minimum duty and a brightness lookup table, because the first few PWM codes give no light.
-- Thermal fallback: read the internal temperature sensor; above a threshold set from the soak
-  test, dim rather than switch off, so retriggering keeps working.
+- Thermal fault cut-off (DEC-23): read the internal temperature sensor; above a threshold well
+  beyond normal operation (set from the soak test, roughly 85 °C die), switch the strip off and
+  blink the status LED until the temperature falls. It is a fault response, not cooling: about
+  70 % of the heat in the tube is the ESP32 and buck, so dimming the strip barely changes it.
 - Configuration: BLE GATT setup page (LE Secure Connections, 6-digit passkey on the label);
   button long-press opens a SoftAP serving the same page for 10 min; 10 s hold = factory reset.
 
@@ -242,7 +245,7 @@ No no-fee power inductor exists at JLCPCB, so a zero-fee buck is not possible.
   over the USB header; strip on, full brightness (static high) and a fade; button press and
   long-press (SoftAP opens); status LED; a trigger from a paired Shelly BLU device switches
   the strip; reversed 24 V input leaves the board unpowered and undamaged (one board per batch).
-- **Soak test (3 m / 1 A only):** closed printed tube, 60 min at full brightness, then 60 min at
+- **Soak test (3 m / 1 A only; also sets the DEC-23 cut-off threshold from the measured die temperature):** closed printed tube, 60 min at full brightness, then 60 min at
   90 % PWM; thermocouples on the output MOSFET drain copper and the tube's inner wall; measure
   V_DS at full on. Pass: tube wall < 65 °C (CON-4). Fail: move the output switch to AOS AON7264E
   (DFN 3×3, exposed pad, new footprint). 1.5 m needs no soak test.
@@ -276,6 +279,8 @@ No no-fee power inductor exists at JLCPCB, so a zero-fee buck is not possible.
 | DEC-17 | 2026-10-01 | Not doing: mmWave footprint, joining home Wi-Fi | Out of scope for a BLE-triggered light |
 | DEC-18 | 2026-10-02 | Operating range 0 to 35 °C ambient | Indoor cabinets and cupboards; matches the §7 thermal budget |
 | DEC-21 | 2026-10-02 | Supply: Futurelight PS002A 24 V 30 W surge-protected LED supply | Karl's chosen supply; 1.25 A covers 3 m at 82 %; its current limit protects the output stage from a shorted strip |
+| DEC-22 | 2026-10-02 | Keep the 40 V SS34 freewheel; no 60 V part | 24 V is 60 % of rating; rail never reaches the TVS breakdown with hot-plug waived; the 40 V output MOSFET has the same exposure, so a 60 V diode alone adds no margin |
+| DEC-23 | 2026-10-02 | Replace the dim-to-70 % thermal fallback with a fault cut-off (strip off above ≈ 85 °C die) | Dimming saves ≈ 0.02 W of ≈ 0.5 W in the tube (≈ 0.4 °C); tube air worst case ≈ 45 °C vs the 65 °C wall limit; the die sensor tracks the ESP32, not the MOSFET or tube wall |
 | DEC-19 | 2026-10-02 | No ESD protection on the terminals or USB header | Terminals wired unpowered; USB bench-only; board enclosed |
 | DEC-20 | 2026-10-02 | Test strategy: functional, JLCPCB PCBA, small batches | Low volume; no fixture or ATE |
 
