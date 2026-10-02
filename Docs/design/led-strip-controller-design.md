@@ -13,9 +13,10 @@ written here cannot be reviewed against (DOC-4).
 Last updated: 2026-10-02
 
 - **Settled:** load and output stage (DEC-01…DEC-06), power (DEC-07, DEC-08), input protection
-  (DEC-09…DEC-12), connectors, USB, UI and enclosure (DEC-13…DEC-16). Concept review register:
+  (DEC-09…DEC-12), connectors, USB, UI and enclosure (DEC-13…DEC-16), module (DEC-27). Concept review register:
   [`reviews/schematic-2026-10-02-rev-b-concept.md`](reviews/schematic-2026-10-02-rev-b-concept.md)
-  (no open Blocker or Major).
+  (no open Blocker or Major). Cost pass 2026-10-02: adjustable FPWM buck, no input fuse
+  (supply requirement CON-7 instead), HL2310A reverse MOSFET, MINI-1-H4X module; 5 extended lines.
 - **Open questions:** the supply's overcurrent behaviour (not published; bench test in §10); low-end PWM linearity (open register row).
 - **Blocked on:** —
 - **Next:** draw the schematic in
@@ -28,7 +29,7 @@ Shelly BLU sensors over BLE, in an inline printed tube between the power supply 
 
 | | |
 |---|---|
-| MCU | ESP32-C3 module (antenna flush with the board's +Y edge) |
+| MCU | ESP32-C3-MINI-1-H4X module, −40 to 105 °C (DEC-27; antenna flush with the board's +Y edge) |
 | Power source | Futurelight PS002A, 24 V DC 30 W (1.25 A) surge-protected LED supply, IP20, also feeding the strip (DEC-21); USB 5 V via the debug header for bring-up |
 | Comms | BLE (Shelly BLU / BTHome triggers, GATT setup page); SoftAP fallback for setup only |
 | Operating temperature | 0 to 35 °C ambient around the tube (DEC-18); the §7 thermal budget is worked at the 35 °C top of the range |
@@ -49,6 +50,7 @@ Shelly BLU sensors over BLE, in an inline printed tube between the power supply 
 | CON-4 | Tube inner wall < 65 °C at 3 m / 1 A after soak (PETG softens ~80 °C, connectors rated 85 °C) | DEC-01, §10 |
 | CON-5 | Output stays off through power-up, ROM bootloader and flashing | DEC-03 |
 | CON-6 | Whole board, including the strip, survives a reversed 24 V input | DEC-09 |
+| CON-7 | Supply: 24 V DC, current-limited, rated ≤ 30 W (1.25 A), current limit below 2 A. The supply's limit is the board's only overcurrent protection | DEC-12, DEC-21 |
 
 ### 1.2 Deliberate simplifications (each with an exit)
 
@@ -59,21 +61,28 @@ Shelly BLU sensors over BLE, in an inline printed tube between the power supply 
   MOSFET carries ≈ 2 A at a few hundred mV, well inside its rating. This holds only for a
   current-limited supply of this size; a stiff high-current supply would destroy the MOSFET.
   Exit: a current-limited high-side switch. Verified by the short-circuit test (§10).
+- **No input fuse** (DEC-12): with a supply meeting CON-7, a 2 A fuse could never open, because
+  the supply limits every fault current below its rating. Exit: if CON-7 stops holding (a
+  stiffer supply), restore a fuse in the +24 V input ahead of the TVS (Littelfuse
+  0466002.NRHF, C3105) together with the high-side switch above.
 
 ## 2. Power architecture
 
 ```
-24 V IN ─ fuse ─ +24 V ─┬─ TVS ─ (board GND)
-                        ├─ LED+ (OUT connector)
-                        ├─ 1 µF local bypass at the output stage
-                        └─ TPS560430X3F FPWM buck ─ +3V3 ─ ESP32-C3 module, status LED
+24 V IN ─ +24 V ─┬─ TVS ─ (board GND)
+                 ├─ LED+ (OUT connector)
+                 ├─ 1 µF local bypass at the output stage
+                 └─ TPS560430XF FPWM buck (51 k / 22 k divider) ─ +3V3 ─ ESP32-C3 module, status LED
 USB 5 V (debug header) ─ B5819W SL ─ buck VIN
 24 V return ─ reverse-polarity MOSFET ─ board GND
 ```
 
-- **Buck** (DEC-07): TI TPS560430X3F, fixed 3.3 V, forced PWM at 1.1 MHz (no PFM bursts, so no
-  audible singing), 600 mA rating against ≈ 350 mA peak load (ESP32-C3 BLE/Wi-Fi peaks).
-  Adjustable TPS560430XF (C523980) is the stock fallback.
+- **Buck** (DEC-07): TI TPS560430XF, adjustable, forced PWM at 1.1 MHz (no PFM bursts, so no
+  audible singing; datasheet §5 Device Comparison Table), 600 mA rating against ≈ 350 mA peak
+  load (ESP32-C3 BLE/Wi-Fi peaks). Output set by RFBT 51 kΩ / RFBB 22 kΩ, 1 % 0402:
+  V_OUT = 1.0 V × (1 + 51/22) = 3.32 V; V_REF ±1.5 % plus 1 % resistors keeps it within
+  ≈ 3.22–3.42 V, inside the module's 3.0–3.6 V. Both resistors close to FB (datasheet layout
+  rule 2).
 - **Inductor** (DEC-08): 10 µH molded, Isat 2.2 A against the IC's 1.4 A maximum peak limit; TI's
   table suggests 12 µH. At 24 V in, ripple ≈ 0.26 A, peak ≈ 0.48 A, under the 0.8 A minimum
   current limit. Verify on the scope at bring-up.
@@ -83,24 +92,22 @@ USB 5 V (debug header) ─ B5819W SL ─ buck VIN
 - **Supply** (DEC-21): Futurelight PS002A, 24 V DC, 30 W = 1.25 A rated, surge protected, IP20,
   135 × 35 × 23 mm. Load at 3 m ≈ 1.0 A strip + ≈ 15 mA board = 82 % of rating; at 1.5 m ≈ 42 %.
   The retail page publishes no overcurrent behaviour (hiccup or constant-current, and at what
-  level); measure it (§10). Because the supply's limit (typically 1.1–1.5 × rating, ≈ 1.4–1.9 A)
-  sits below the 2 A fuse, the supply, not the fuse, ends a short; the fuse covers a fault the
-  supply does not limit.
+  level); measure it (§10). Its limit (typically 1.1–1.5 × rating, ≈ 1.4–1.9 A) is the board's
+  only overcurrent protection (CON-7, DEC-12): it ends a shorted strip or a TVS failed short.
 
 ## 3. Input and protection
 
-- **Reverse polarity** (DEC-09): SI2356DS in the negative line. Drain to the input − terminal,
-  source to board GND, gate pulled to +24 V through 100 kΩ, BZT52C10 zener gate → source (cathode
-  at gate). Normal: gate ≈ 10 V (zener max 10.5 V, inside the ±12 V gate limit), ≤ 51 mΩ.
-  Reversed: body diode blocks; the zener conducts forward and holds the gate ≈ −0.7 V, so the
-  MOSFET stays off and its gate never sees −24 V. Board GND ≠ input − terminal.
+- **Reverse polarity** (DEC-09, DEC-02): HL2310A (60 V) in the negative line. Drain to the input −
+  terminal, source to board GND, gate pulled to +24 V through 100 kΩ, BZT52C10 zener gate → source
+  (cathode at gate). Normal: gate ≈ 10 V (zener 9.5–10.5 V, inside the ±20 V gate limit),
+  ≤ 105 mΩ at 10 V (≤ 125 mΩ at 4.5 V bounds the 9.5 V corner). Reversed: body diode blocks 24 V
+  of 60 V; the zener conducts forward and holds the gate ≈ −0.7 V, so the MOSFET stays off and
+  its gate never sees −24 V. Board GND ≠ input − terminal.
 - **TVS** (DEC-10): SMBJ26A across +24 V and board GND, after the reverse MOSFET. Standoff 26 V,
-  breakdown 28.9–31.9 V, below the MOSFETs' 40 V and the buck's 38 V abs max. Its 42.1 V clamp
+  breakdown 28.9–31.9 V, below the output MOSFET's 40 V and the buck's 38 V abs max. Its 42.1 V clamp
   figure applies only at the full 14 A pulse rating.
-- **Fuse** (DEC-12): Littelfuse 0466002.NRHF, 2 A very fast-acting 1206, 63 V, in the +24 V
-  input ahead of the TVS. Sized 1.0 A ÷ 0.75 (Littelfuse standard 25 % rerating) ÷ 0.9 for
-  temperature, next standard size up. It limits sustained overcurrent after a shorted output or a
-  TVS that fails short; it does not save the output MOSFET.
+- **No fuse** (DEC-12): overcurrent protection is the supply's current limit (CON-7). The
+  +24 V input runs straight from the IN connector to the TVS.
 - **No bulk electrolytic** (DEC-11): it set the enclosure height.
 
 ## 4. Sensor / analogue front end
@@ -126,8 +133,7 @@ glitch at power-up), GPIO20/21 (UART, pulled up), GPIO2/8/9 (strapping pins).
 ### 6.1 Output stage
 
 - **Switch** (DEC-02): Vishay SI2356DS low side, gate driven directly from GPIO7. ≤ 70 mΩ
-  guaranteed at a 2.5 V gate, V_GS(th) 0.6–1.5 V, 40 V, V_GS ±12 V. Same part as the reverse
-  MOSFET.
+  guaranteed at a 2.5 V gate, V_GS(th) 0.6–1.5 V, 40 V, V_GS ±12 V.
 - **Gate network** (DEC-04): 100 Ω series (≈ 55–60 ns drain edges), 10 kΩ pull-down to source
   (holds the gate low even against an internal 45 kΩ pull-up), GPIO at maximum drive strength.
 - **Freewheel** (DEC-05): SS34 Schottky across the strip, cathode to LED+ (DC-only output). With
@@ -147,9 +153,9 @@ design for 100 % on with no time limit. Estimates, closed tube in 35 °C ambient
 |---|---|---|
 | Output SI2356DS, full on (typ / worst) | 0.015 / 0.02 W | 0.06 / 0.085 W |
 | Output SI2356DS, ~90 % PWM, 100 Ω gate (worst) | ≈ 0.035 W | ≈ 0.11 W |
-| Reverse-protection SI2356DS (≤ 51 mΩ at 10 V gate) | ≤ 0.015 W | ≤ 0.06 W |
+| Reverse-protection HL2310A (≤ 105 mΩ at 10 V gate; × 1.2 warm) | ≤ 0.03 W | ≤ 0.13 W |
 | ESP32-C3 + buck | ≈ 0.35 W | ≈ 0.35 W |
-| Air inside the tube | ≈ 43 °C | ≈ 45 °C |
+| Air inside the tube | ≈ 43 °C | ≈ 47 °C |
 | Output MOSFET junction (Tj max 150 °C) | ≈ 50 °C | ≈ 65 °C worst |
 
 Worst case = datasheet maximum on-resistance at a 2.5 V gate (70 mΩ) × 1.2 for a warm junction;
@@ -204,8 +210,7 @@ own antenna (L-SI-2).
 
    The strip and its cable are outside the board's control; this keeps the board's own
    contribution small.
-8. **Input:** fuse directly at the IN connector's + pin, then the TVS; TVS after the
-   reverse-protection MOSFET.
+8. **Input:** TVS close to the IN connector, after the reverse-protection MOSFET.
 9. **Test access:** a bare copper test pad on the output drain pour for a thermocouple, and
    test points on drain and GND for measuring V_DS at full on during the soak test.
 
@@ -232,24 +237,29 @@ ESP-IDF v5.5 (DEC-25), in `Firmware/`. The `ESPHome/` configuration belongs to t
 - Thermal fault cut-off (DEC-23): read the internal temperature sensor; above a threshold well
   beyond normal operation (set from the soak test, roughly 85 °C die), switch the strip off and
   blink the status LED until the temperature falls. It is a fault response, not cooling: about
-  70 % of the heat in the tube is the ESP32 and buck, so dimming the strip barely changes it.
+  60 % of the heat in the tube at 3 m (more at 1.5 m) is the ESP32 and buck, and the reverse
+  MOSFET's share does not fall with duty, so dimming the strip barely changes it.
 - Configuration: BLE GATT setup page (LE Secure Connections, 6-digit passkey on the label);
   button long-press opens a SoftAP serving the same page for 10 min; 10 s hold = factory reset.
 
 ## 9. Bill of materials and sourcing
 
-JLCPCB PCBA. Extended (fee) lines: ESP32-C3 module, buck, inductor, connector, MOSFET, fuse = 6.
-No no-fee power inductor exists at JLCPCB, so a zero-fee buck is not possible.
+JLCPCB PCBA. Extended (fee) lines: ESP32-C3 module, buck, inductor, connector, output MOSFET = 5.
+Every other line is basic or preferred (no fee); parts still to be chosen (buck input/output
+capacitors, status LED and resistor, button) are picked from basic/preferred parts.
 
 | Function | Part | LCSC |
 |---|---|---|
-| Output and reverse MOSFET (×2) | Vishay SI2356DS-T1-GE3 | C74127 |
+| MCU module | Espressif ESP32-C3-MINI-1-H4X | C41349510 |
+| Output MOSFET | Vishay SI2356DS-T1-GE3 | C74127 |
 | Gate series / pull-down | 100 Ω / 10 kΩ 0402 | C25076 / C25744 |
+| Reverse MOSFET | hongjiacheng HL2310A | C7420347 |
 | Reverse-MOSFET gate pull-up / zener | 100 kΩ 0402 / BZT52C10 | C25741 / C19077408 |
 | Freewheel Schottky | SS34 | C8678 |
 | Output-stage bypass | Samsung CL21B105KBFNNNE 1 µF 50 V X7R 0805 | C28323 |
-| Buck / inductor | TI TPS560430X3F / cjiang FXL0420-100-M | C2071721 / C177242 |
-| TVS / fuse | SMBJ26A / Littelfuse 0466002.NRHF | C19077580 / C3105 |
+| Buck / inductor | TI TPS560430XFDBVR / cjiang FXL0420-100-M | C523980 / C177242 |
+| Buck feedback RFBT / RFBB | 51 kΩ / 22 kΩ 1 % 0402 | C25794 / C25768 |
+| TVS | SMBJ26A | C19077580 |
 | USB Schottky | B5819W SL | C8598 |
 | IN and OUT connectors (×2) | HDGC4001SMD-S-2P push-in, 18–24 AWG | C5197184 |
 
@@ -276,8 +286,8 @@ No no-fee power inductor exists at JLCPCB, so a zero-fee buck is not possible.
   brightness at the top.
 - **Short circuit (one board, with the PS002A):** short LED+ to LED− with the output on, for
   10 s. Record the supply's behaviour (hiccup or constant current, and the current). Pass: the
-  board keeps running from the buck or recovers when the short is removed, the output MOSFET and
-  fuse survive.
+  supply limits below 2 A (CON-7); the board keeps running from the buck or recovers when the
+  short is removed; the output MOSFET survives.
 - **Bring-up order:** TBD with the schematic.
 
 ## 11. Decision log
@@ -285,17 +295,17 @@ No no-fee power inductor exists at JLCPCB, so a zero-fee buck is not possible.
 | ID | Date | Decision | Rationale |
 |---|---|---|---|
 | DEC-01 | 2026-10-01 | Product is a 24 V COB LED-strip controller, not a relay module; new product number `FEHA-LSC-001` | Change of role; relay board `FEHA-RM-001` Rev A stays as built |
-| DEC-02 | 2026-10-02 | Output and reverse MOSFET: Vishay SI2356DS | Guaranteed ≤ 70 mΩ at a 2.5 V gate. Rejected: HL2310A (specified only at ≥ 4.5 V), AO3422 (≤ 200 mΩ at 2.5 V), AO3400A (30 V), photo-MOSFET SSRs (too slow for PWM) |
+| DEC-02 | 2026-10-02 | Output MOSFET: Vishay SI2356DS. Reverse MOSFET: hongjiacheng HL2310A | Output: guaranteed ≤ 70 mΩ at a 2.5 V gate. Rejected for the output: HL2310A (specified only at ≥ 4.5 V), AO3422 (≤ 200 mΩ at 2.5 V), AO3400A (30 V: ≈ 85 % of rating at 25.2 V rail plus SS34 drop, unclamped below the TVS's 28.9 V), photo-MOSFET SSRs (too slow for PWM); JLCPCB has no no-fee 40 V logic-level part. Reverse: its gate sits at ≈ 10 V from the zener, so logic-level drive is not needed; HL2310A is specified at 10 V (≤ 105 mΩ), 60 V, ±20 V gate, preferred (no fee) at ≈ $0.04 against $0.35. Costs ≈ +0.07 W at 1 A (≈ +1.5 °C tube air). Using SI2356DS for both (one part number) was the earlier choice, changed in the 2026-10-02 cost pass |
 | DEC-03 | 2026-10-02 | PWM on GPIO7 | No pull at reset; continuity with Rev A. GPIO0/1/3/4/5 equally safe |
 | DEC-04 | 2026-10-02 | 100 Ω gate series, 10 kΩ pull-down | Ample drive margin at a 1.6 V plateau; slower edges near the BLE radio for ≈ +15 mW. 33 Ω and 100 kΩ rejected |
 | DEC-05 | 2026-10-01 | SS34 freewheel across the strip; 1 µF local bypass at the output stage | DC-only output; turn-on edge supplied locally |
 | DEC-06 | 2026-10-01 | 19.5 kHz, 12-bit PWM; full brightness = static high | Inaudible, smooth fades; no switching loss in the commonest state |
-| DEC-07 | 2026-10-01 | TPS560430X3F forced-PWM buck | No PFM singing. AP63201 FPWM rejected (no stock); AP63203 (Rev A) removed |
+| DEC-07 | 2026-10-02 | TPS560430XF forced-PWM buck, adjustable, 51 kΩ / 22 kΩ divider for 3.32 V | No PFM singing. XF and X3F are both 1.1 MHz FPWM (datasheet §5); XF is $0.62 against $1.39 for the fixed X3F, for two basic 0402 resistors. TI Table 1's 51 k / 22.1 k replaced by 22 k (basic part). Rejected: X3F (price), AP63201 FPWM (no stock), AP63203 (Rev A; PFM), the no-fee bucks (TPS5430: non-synchronous, SOIC-8-EP, 4.4 mA quiescent; TPS54331: 28 V max; XL1509/LM2596: 150 kHz) |
 | DEC-08 | 2026-10-01 | 10 µH FXL0420-100-M inductor | Isat margin over the 1.4 A peak limit; verify on scope |
 | DEC-09 | 2026-10-01 | Reverse-polarity N-MOSFET in the negative line | ≤ 0.06 W at 1 A against ≈ 0.45 W for the series SS34 it replaced |
 | DEC-10 | 2026-10-01 | SMBJ26A TVS after the reverse MOSFET | Clamps supply overshoot below the buck's 38 V abs max |
 | DEC-11 | 2026-10-02 | Hot-plug waived: no damping network, no hot-plug test, no bulk electrolytic | Board never connected to a live lead; electrolytic set the enclosure height |
-| DEC-12 | 2026-10-02 | Littelfuse 0466002.NRHF 2 A fuse in the +24 V input | No overcurrent protection existed; very fast-acting is fine with no inrush |
+| DEC-12 | 2026-10-02 | No input fuse; overcurrent protection is the supply's current limit, stated as requirement CON-7 | The 30 W PS002A limits at ≈ 1.4–1.9 A, below the 2 A fuse's rating (466 series carries 100 % of rating for ≥ 4 h), so with this supply a shorted strip or a TVS failed short is ended by the supply and the fuse could never open. Saves an extended line ($3 per order) and $0.07 per board. A 0 Ω placeholder was not adopted (jumper current rating unverified). Earlier choice: Littelfuse 0466002.NRHF 2 A in the +24 V input, removed in the 2026-10-02 cost pass; it returns with any supply that does not meet CON-7 |
 | DEC-13 | 2026-10-01 | Push-in 2-pin connectors in and out (HDGC4001SMD-S-2P) | Tool-free field wiring, 18–24 AWG |
 | DEC-14 | 2026-10-01 | USB-C and USBLC6 removed; 1×4 press-fit debug header, 5 V via B5819W SL | Bench-only access; same Schottky as Rev A D6 |
 | DEC-15 | 2026-10-01 | GPIO9 button and one status LED; strip used as feedback. Red error and green power LEDs removed | Enclosure is closed; fewer parts |
@@ -304,12 +314,13 @@ No no-fee power inductor exists at JLCPCB, so a zero-fee buck is not possible.
 | DEC-18 | 2026-10-02 | Operating range 0 to 35 °C ambient | Indoor cabinets and cupboards; matches the §7 thermal budget |
 | DEC-21 | 2026-10-02 | Supply: Futurelight PS002A 24 V 30 W surge-protected LED supply | Karl's chosen supply; 1.25 A covers 3 m at 82 %; its current limit protects the output stage from a shorted strip |
 | DEC-22 | 2026-10-02 | Keep the 40 V SS34 freewheel; no 60 V part | 24 V is 60 % of rating; rail never reaches the TVS breakdown with hot-plug waived; the 40 V output MOSFET has the same exposure, so a 60 V diode alone adds no margin |
-| DEC-23 | 2026-10-02 | Replace the dim-to-70 % thermal fallback with a fault cut-off (strip off above ≈ 85 °C die) | Dimming saves ≈ 0.02 W of ≈ 0.5 W in the tube (≈ 0.4 °C); tube air worst case ≈ 45 °C vs the 65 °C wall limit; the die sensor tracks the ESP32, not the MOSFET or tube wall |
+| DEC-23 | 2026-10-02 | Replace the dim-to-70 % thermal fallback with a fault cut-off (strip off above ≈ 85 °C die) | Dimming saves ≈ 0.02 W of ≈ 0.6 W in the tube (≈ 0.4 °C); tube air worst case ≈ 47 °C vs the 65 °C wall limit; the die sensor tracks the ESP32, not the MOSFET or tube wall |
 | DEC-24 | 2026-10-02 | USB header and 24 V supply never connected together (procedural, no circuit change) | USB GND bypasses the reverse MOSFET: with an earthed supply output, a reversed lead and an earthed host, host VBUS is shorted through the B5819W. The board runs from USB alone for flashing |
 | DEC-25 | 2026-10-02 | Firmware framework: ESP-IDF v5.5 | Karl's choice; ESPHome is not used for this product |
 | DEC-26 | 2026-10-02 | Fades through a perceptual lookup table with a measured `min_code`, stepped in software, same table both directions | The MOSFET cannot resolve the lowest 12.5 ns codes; LEDC hardware fade is linear in duty |
 | DEC-19 | 2026-10-02 | No ESD protection on the terminals or USB header | Terminals wired unpowered; USB bench-only; board enclosed |
 | DEC-20 | 2026-10-02 | Test strategy: functional, JLCPCB PCBA, small batches | Low volume; no fixture or ATE |
+| DEC-27 | 2026-10-02 | Module: ESP32-C3-MINI-1-H4X (C41349510) | Same module as GeyserSense (FEHA-GTS-001). Chip revision v1.1, −40 to 105 °C, cheaper than the MINI-1-N4 ($2.95 against $3.03), which Espressif lists as NRND (MINI-1 datasheet v2.2). Rejected: ESP8684-MINI-1 / ESP32-C2 (low stock, firmware port, tighter RAM for BLE + GATT + SoftAP), bare ESP32-C3 chip (crystal, flash, antenna matching and RF layout for no saving at small batches) |
 
 **Baseline rule:** until the first schematic gate closes, this table is a *baseline* — rows are
 edited in place, not superseded. After that gate, a changed decision gets
@@ -322,14 +333,15 @@ Vendor PDFs in `../datasheets/` are ground truth.
 | Part | File | Note |
 |---|---|---|
 | SI2356DS | `Vishay-SI2356DS.pdf` | Doc 62893 Rev. A; gate charge p.3 |
-| TPS560430 | `TI-TPS560430.pdf` | Current limits, Table 1 L/C values |
+| HL2310A | `hongjiacheng-HL2310A.pdf` | Rev 2.1; R_DS(on) ≤ 105 mΩ at 10 V, V_GS ±20 V |
+| TPS560430 | `TI-TPS560430.pdf` | SLVSE22B; §5 variants (XF = FPWM adjustable), V_REF 1.0 V (§8.3.2), Table 1 L/C/divider values |
 | ESP32-C3 | `Espressif-ESP32-C3.pdf` | v2.4; pin reset states Tables 2-1/2-2 |
-| ESP32-C3-MINI-1 | `Espressif-ESP32-C3-MINI-1.pdf` | Module (Rev A used MINI-1-H4) |
+| ESP32-C3-MINI-1 | `Espressif-ESP32-C3-MINI-1.pdf` | v2.2; H4X variant, 105 °C, chip v1.1 (Rev A used MINI-1-H4) |
 | BZT52C10 | `hongjiacheng-BZT52C10.pdf` | |
 | SMBJ26A | `hongjiacheng-SMBJ26A.pdf` | |
 | SS34 | `MDD-SS34.pdf` | |
 | B5819W SL | `CJ-B5819W-SL.pdf` | 40 V |
-| 0466002.NRHF | `Littelfuse-0466.pdf` | 466 series, very fast-acting, 63 V |
+| 0466002.NRHF | `Littelfuse-0466.pdf` | Not fitted (DEC-12); the part for a supply outside CON-7 |
 | CL21B105KBFNNNE | `Samsung-CL21B105KBFNNNE.pdf` | |
 | FXL0420-100-M | `cjiang-FXL0420-100-M.pdf` | Series catalogue |
 | HDGC4001SMD-S-2P | `HDGC-HDGC4001SMD-S-2P.pdf` | |
