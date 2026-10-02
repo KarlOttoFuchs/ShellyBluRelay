@@ -18,9 +18,11 @@ Last updated: 2026-10-02
   (no open Blocker or Major). Cost pass 2026-10-02: adjustable FPWM buck, no input fuse
   (supply requirement CON-7 instead), HL2310A reverse MOSFET, MINI-1-H4X module; 5 extended lines.
 - **Open questions:** the supply's overcurrent behaviour (not published; bench test in §10); low-end PWM linearity (open register row).
+- **Schematic:** first capture complete (commit 6039da4): reverse polarity, TVS, buck, MCU
+  core, output stage, USB debug header CN3 (locking press-fit footprint, DNP). ERC clean apart
+  from kicad-cli library-path warnings. Net class `PWR_1A` (1.0 mm) on +24V, VIN_N, LED_N, GND.
 - **Blocked on:** —
-- **Next:** draw the schematic in
-  `Hardware/FEHA-LSC-001-01-Controller-Rev-A/`.
+- **Next:** full schematic review gate (`hardware-design-review`, register in `reviews/`).
 
 ## 1. What this board is
 
@@ -99,8 +101,9 @@ USB 5 V (debug header) ─ B5819W SL ─ buck VIN
 
 - **Reverse polarity** (DEC-09, DEC-02): HL2310A (60 V) in the negative line. Drain to the input −
   terminal, source to board GND, gate pulled to +24 V through 100 kΩ, BZT52C10 zener gate → source
-  (cathode at gate). Normal: gate ≈ 10 V (zener 9.5–10.5 V, inside the ±20 V gate limit),
-  ≤ 105 mΩ at 10 V (≤ 125 mΩ at 4.5 V bounds the 9.5 V corner). Reversed: body diode blocks 24 V
+  (cathode at gate). Normal: gate a little below the zener's 9.5–10.5 V rating, because the
+  bias current is only ≈ 0.14 mA against its 5 mA test current; never above 10.5 V, inside the
+  ±20 V gate limit. R_DS(on) ≤ 105 mΩ at 10 V, ≤ 125 mΩ guaranteed at 4.5 V. Reversed: body diode blocks 24 V
   of 60 V; the zener conducts forward and holds the gate ≈ −0.7 V, so the MOSFET stays off and
   its gate never sees −24 V. Board GND ≠ input − terminal.
 - **TVS** (DEC-10): SMBJ26A across +24 V and board GND, after the reverse MOSFET. Standoff 26 V,
