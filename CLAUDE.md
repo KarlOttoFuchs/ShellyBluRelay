@@ -33,7 +33,7 @@ This repository holds two products (see `Docs/design/part-numbering.md`):
 - `Docs/datasheets/` — vendor PDFs for key parts. **Treat these PDFs as ground truth** for any
   electrical value, pinout or pad map — read them directly with the `Read` tool (no OCR or
   conversion step needed) rather than relying on scraped/OCR'd sources.
-- `ESPHome/`, `Firmware/` — firmware (out of scope for hardware sessions).
+- `Firmware/` — ESP-IDF firmware; `ESPHome/` — the relay module's ESPHome configuration (both out of scope for hardware sessions).
 
 ## Working agreement (Karl ↔ Claude)
 
@@ -169,6 +169,7 @@ Reference/Value visible. Use the `kicad-part-fields` skill rather than doing thi
 
 ## Firmware
 
-ESPHome (`ESPHome/`), with an earlier ESP-IDF firmware in `Firmware/`. The hardware/firmware
-contract (PWM pin, drive strength, brightness rules) is the design spec §8. Install ESPHome via
-`pipx`, never into a toolchain venv; use the **`esp-idf` skill** for any `idf.py` command.
+The LED Strip Controller firmware is **ESP-IDF v5.5** (`Firmware/`). The hardware/firmware
+contract (PWM pin, drive strength, dimming curve, thermal cut-off) is the design spec §8. Use the
+**`esp-idf` skill** for any `idf.py` command. `ESPHome/` is the relay module's configuration and
+is not used for this product.

@@ -211,10 +211,24 @@ own antenna (L-SI-2).
 
 ## 8. Firmware
 
-ESPHome (see `ESPHome/` in this repo). Hardware/firmware contract:
+ESP-IDF v5.5 (DEC-25), in `Firmware/`. The `ESPHome/` configuration belongs to the relay module
+`FEHA-RM-001` and is not used for this product. Hardware/firmware contract:
 
 - PWM on GPIO7, 19.5 kHz, 12-bit LEDC, `GPIO_DRIVE_CAP_3`; full brightness = static high.
-- A minimum duty and a brightness lookup table, because the first few PWM codes give no light.
+- Dimming curve (DEC-26). The MOSFET cannot follow the shortest pulses: one LEDC step is 12.5 ns
+  against ≈ 20–30 ns to reach the gate threshold and ≈ 55 ns per drain edge, so codes 1–2 give
+  no light and codes ≈ 3–10 do not track the duty (estimates; the cut-over varies with the
+  MOSFET threshold and temperature). The same happens mirror-image at the top, where the last
+  few codes already look fully on. Firmware therefore:
+  - maps brightness to duty through a perceptual lookup table (CIE 1931 lightness or gamma
+    ≈ 2.2), starting at `min_code`, the first code that gives clean light (measured, §10);
+    brightness 0 is duty 0, exactly;
+  - runs every fade, on → off and off → on, through that one table, stepping the duty from an
+    `esp_timer` at ≈ 200 Hz with `ledc_set_duty()` + `ledc_update_duty()` (the change takes
+    effect at the next PWM period, so there are no glitches). The built-in LEDC hardware fade is
+    linear in duty and would spend most of a fade in the bright half;
+  - goes from the top of the table to full-scale duty (static high) at the end of a fade up,
+    and starts a fade down from there, so full brightness has no switching loss (DEC-06).
 - Thermal fault cut-off (DEC-23): read the internal temperature sensor; above a threshold well
   beyond normal operation (set from the soak test, roughly 85 °C die), switch the strip off and
   blink the status LED until the temperature falls. It is a fault response, not cooling: about
@@ -254,6 +268,12 @@ No no-fee power inductor exists at JLCPCB, so a zero-fee buck is not possible.
   V_DS at full on. Pass: tube wall < 65 °C (CON-4). Fail: move the output switch to AOS AON7264E
   (DFN 3×3, exposed pad, new footprint). 1.5 m needs no soak test.
 - **Buck:** check ripple and inductor current on the scope at 24 V in (DEC-08).
+- **Dimming low end (DEC-26):** in a dark room, step the duty up from 0 with a scope on the
+  output MOSFET drain; record the first code that gives a clean full-height pulse and visible
+  light, and set `min_code` a few codes above it. Then fade on → off and off → on over ≈ 1 s
+  and ≈ 5 s, by eye and on the scope. Pass: no visible step at the bottom, no snap to off at
+  the end of a fade down, no flash at the start of a fade up, and no visible jump into full
+  brightness at the top.
 - **Short circuit (one board, with the PS002A):** short LED+ to LED− with the output on, for
   10 s. Record the supply's behaviour (hiccup or constant current, and the current). Pass: the
   board keeps running from the buck or recovers when the short is removed, the output MOSFET and
@@ -286,6 +306,8 @@ No no-fee power inductor exists at JLCPCB, so a zero-fee buck is not possible.
 | DEC-22 | 2026-10-02 | Keep the 40 V SS34 freewheel; no 60 V part | 24 V is 60 % of rating; rail never reaches the TVS breakdown with hot-plug waived; the 40 V output MOSFET has the same exposure, so a 60 V diode alone adds no margin |
 | DEC-23 | 2026-10-02 | Replace the dim-to-70 % thermal fallback with a fault cut-off (strip off above ≈ 85 °C die) | Dimming saves ≈ 0.02 W of ≈ 0.5 W in the tube (≈ 0.4 °C); tube air worst case ≈ 45 °C vs the 65 °C wall limit; the die sensor tracks the ESP32, not the MOSFET or tube wall |
 | DEC-24 | 2026-10-02 | USB header and 24 V supply never connected together (procedural, no circuit change) | USB GND bypasses the reverse MOSFET: with an earthed supply output, a reversed lead and an earthed host, host VBUS is shorted through the B5819W. The board runs from USB alone for flashing |
+| DEC-25 | 2026-10-02 | Firmware framework: ESP-IDF v5.5 | Karl's choice; ESPHome is not used for this product |
+| DEC-26 | 2026-10-02 | Fades through a perceptual lookup table with a measured `min_code`, stepped in software, same table both directions | The MOSFET cannot resolve the lowest 12.5 ns codes; LEDC hardware fade is linear in duty |
 | DEC-19 | 2026-10-02 | No ESD protection on the terminals or USB header | Terminals wired unpowered; USB bench-only; board enclosed |
 | DEC-20 | 2026-10-02 | Test strategy: functional, JLCPCB PCBA, small batches | Low volume; no fixture or ATE |
 
