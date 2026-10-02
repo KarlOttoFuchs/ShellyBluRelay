@@ -246,7 +246,7 @@ ESP-IDF v5.5 (DEC-25), in `Firmware/`. The `ESPHome/` configuration belongs to t
 
 JLCPCB PCBA. Extended (fee) lines: ESP32-C3 module, buck, inductor, connector, output MOSFET = 5.
 Every other line is basic or preferred (no fee); parts still to be chosen (buck input/output
-capacitors, status LED and resistor, button) are picked from basic/preferred parts.
+capacitors, status-LED resistor) are picked from basic/preferred parts.
 
 | Function | Part | LCSC |
 |---|---|---|
@@ -261,6 +261,8 @@ capacitors, status LED and resistor, button) are picked from basic/preferred par
 | Buck feedback RFBT / RFBB | 51 kΩ / 22 kΩ 1 % 0402 | C25794 / C25768 |
 | TVS | SMBJ26A | C19077580 |
 | USB Schottky | B5819W SL | C8598 |
+| Status LED | Hubei KENTO KT-0805W, white, 0805 | C34499 |
+| Button | XUNPU TS-1088-AR02016, 4 × 3 mm, 2 mm tall | C720477 |
 | IN and OUT connectors (×2) | HDGC4001SMD-S-2P push-in, 18–24 AWG | C5197184 |
 
 ## 10. Verification and bring-up plan
