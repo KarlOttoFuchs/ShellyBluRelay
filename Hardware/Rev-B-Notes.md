@@ -5,7 +5,7 @@ Rev A; the Rev A schematic/PCB are unchanged.
 
 ---
 
-## 0. Rev B direction — settled 2026-10-01
+## 0. Rev B direction — settled 2026-10-01, revised 2026-10-02
 
 Rev B is redirected from a relay module to a **24 V LED-strip controller** for under-cabinet
 COB strips and cupboard lights, triggered by Shelly BLU sensors. Settled in design discussion:
@@ -13,24 +13,25 @@ COB strips and cupboard lights, triggered by Shelly BLU sensors. Settled in desi
 | Area | Decision | Part (LCSC) |
 |---|---|---|
 | Load | 24 V COB strip, 8 W/m. Main use 1.5 m = 12 W, 0.5 A. Rated up to 3 m = 24 W, 1.0 A continuous, subject to the soak test below | — |
-| Output | Low-side N-MOSFET, gate driven directly from GPIO (valid to ≈1 A; on-resistance at 3.3 V gate is typical-curve only, check V_DS at full on during bring-up) | hongjiacheng HL2310A, 60 V / 3 A (C7420347) |
-| | 33 Ω gate series (faster edges, lower switching loss), GPIO at maximum drive strength (`GPIO_DRIVE_CAP_3`), 100 kΩ gate pull-down (off through reset/flash) | C25105, C25741 |
+| Output | Low-side N-MOSFET, gate driven directly from GPIO. On-resistance is guaranteed at a 2.5 V gate (≤ 70 mΩ, V_GS(th) 0.6–1.5 V), so the 3.3 V drive is inside the datasheet. 40 V rating is adequate because the board is never hot-plugged (see Input protection). Changed 2026-10-02 from HL2310A, which is specified only at 4.5 V and 10 V | Vishay SI2356DS-T1-GE3, 40 V / 4.3 A, V_GS ±12 V (C74127, extended) |
+| | PWM on GPIO7 (MTDO, Rev A's relay pin): no internal pull at reset and only a 5 ns low glitch (ESP32-C3 datasheet Tables 2-1/2-2), so the strip stays off through power-up, the ROM bootloader and flashing. Avoid GPIO6 (pull-up at reset), GPIO18/19 (USB; GPIO18 has a 50 µs high glitch), GPIO20/21 (UART, pulled up), GPIO2/8/9 (straps) | firmware / schematic |
+| | 33 Ω gate series (faster edges, lower switching loss), GPIO at maximum drive strength (`GPIO_DRIVE_CAP_3`), 10 kΩ gate pull-down (off through reset/flash; holds the gate low even against an internal 45 kΩ pull-up; 0.33 mA while on). Changed 2026-10-02 from 100 kΩ | C25105, C25744 |
 | | Freewheel Schottky across the strip (DC-only output) | SS34 (C8678) |
 | | Local +24 V → GND bypass at the output stage: supplies the fast current edge at each turn-on locally instead of from the buck's input capacitors at the far end of the board. 1 µF 50 V X7R 0805; at 24 V DC bias expect roughly half that, which is enough for edge current | Samsung CL21B105KBFNNNE (C28323) |
 | | PWM 19.5 kHz, 12-bit (LEDC) — inaudible, smooth fades | firmware |
 | Firmware rules | (1) Full brightness = output held permanently high (LEDC at full-scale duty), never 99.x % PWM, so the commonest case has no switching loss. (2) Thermal fallback: read the ESP32-C3 internal temperature sensor; above a threshold set from the soak test, dim gently (e.g. to 70 %) rather than switch off, so retriggering keeps working | firmware |
 | Buck | Forced-PWM 3.3 V buck (no PFM bursts → no singing; AP63201 FPWM part had 1 in stock) | TI TPS560430X3F (C2071721); adjustable TPS560430XF (C523980) as fallback |
 | | 10 µH molded inductor, 2.2 A Isat vs 1.4 A IC peak limit (TI table suggests 12 µH; verify on scope) | cjiang FXL0420-100-M (C177242) |
-| Input protection | Reverse polarity for the whole board incl. strip: N-MOSFET in the negative line — drain to the input − terminal, source to board GND, gate from +24 V through 100 kΩ, 10 V zener gate→source (cathode at gate). Normal polarity: fully on at ~10 V gate, ≤ 105 mΩ → ≤ 0.03 W at 0.5 A, ≤ 0.1 W at 1 A. Reversed: gate negative, body diode reverse-biased, blocks. Same part as the output switch (one part number). Replaces the series SS34, which dissipated ~0.2 W at 0.5 A and ~0.45 W at 1 A. Note board GND ≠ input − terminal. TVS after the MOSFET clamps hot-plug ringing (ceramic-only input can ring towards 2 × 24 V vs the buck's 38 V abs max). No bulk electrolytic (dropped 2026-10-01: TVS covers it, and it set the enclosure height). Unfitted footprint for a series R + ceramic C damping network across the input, fitted only if the hot-plug test fails | HL2310A (C7420347); BZT52C10 (C19077408); 100 kΩ (C25741); SMBJ26A (C19077580); damping R/C basic parts, DNP |
-| Bring-up tests | (1) Hot-plug: plug the live 24 V lead in ~10 times while scoping VIN at the buck. Pass: peak < 36 V. Fail: fit the damping network and repeat. (2) Soak, 3 m / 1 A: closed printed tube, 60 min at full brightness, then 60 min at 90 % PWM; thermocouples on the output MOSFET drain copper and the tube's inner wall; measure V_DS at full on. Pass: tube wall < 65 °C (PETG softens ~80 °C, connectors rated 85 °C). Fail: move the output switch to AOS AON7264E (DFN 3×3, exposed pad, extended part, new footprint). 1.5 m needs no soak test (< 0.1 W per MOSFET) | — |
+| Input protection | Reverse polarity for the whole board incl. strip: N-MOSFET in the negative line — drain to the input − terminal, source to board GND, gate from +24 V through 100 kΩ, 10 V zener gate→source (cathode at gate). Normal polarity: fully on at ~10 V gate (zener 9.5–10.5 V, inside the MOSFET's ±12 V gate limit), ≤ 51 mΩ → ≤ 0.015 W at 0.5 A, ≤ 0.06 W at 1 A. Reversed: gate negative, body diode reverse-biased, blocks. Same part as the output switch (one part number). Replaces the series SS34, which dissipated ~0.2 W at 0.5 A and ~0.45 W at 1 A. Note board GND ≠ input − terminal. **Hot-plug waived 2026-10-02:** the board is never connected to a live 24 V lead, so input ringing towards 2 × 24 V is not a design case; the hot-plug test and the damping-network footprint are dropped. TVS after the MOSFET stays as a clamp for supply overshoot and surges (starts conducting at 28.9–31.9 V, below the MOSFETs' 40 V and the buck's 38 V abs max; its 42.1 V clamp figure applies only at the full 14 A pulse rating). No bulk electrolytic (dropped 2026-10-01: it set the enclosure height). Fuse in the +24 V input, ahead of the TVS (added 2026-10-02): 2 A fast-acting 1206, 63 V DC, 50 A interrupt rating. It limits a sustained overcurrent after a shorted output or a TVS that fails short; it does not save the output MOSFET from a short. 2 A = 1.0 A load ÷ 0.75 ÷ 0.9 (temperature) rounded up to the next standard size | SI2356DS (C74127); BZT52C10 (C19077408); 100 kΩ (C25741); SMBJ26A (C19077580); Littelfuse 0466002.NRHF (C3105, extended) |
+| Bring-up tests | Soak, 3 m / 1 A: closed printed tube, 60 min at full brightness, then 60 min at 90 % PWM; thermocouples on the output MOSFET drain copper and the tube's inner wall; measure V_DS at full on. Pass: tube wall < 65 °C (PETG softens ~80 °C, connectors rated 85 °C). Fail: move the output switch to AOS AON7264E (DFN 3×3, exposed pad, extended part, new footprint). 1.5 m needs no soak test (< 0.1 W per MOSFET) | — |
 | Connectors | Push-in, 2-pin, in and out (18–24 AWG) | HDGC4001SMD-S-2P ×2 (C5197184) |
-| USB | USB-C and USBLC6 removed. 1×4 offset-hole press-fit header (5V via Schottky → VIN, D+, D−, GND) for native USB-Serial-JTAG flash/console/debug | footprint only |
+| USB | USB-C and USBLC6 removed. 1×4 offset-hole press-fit header (5V via Schottky → VIN, D+, D−, GND) for native USB-Serial-JTAG flash/console/debug. Schottky is the same part as Rev A D6 (VBUS → VIN): 40 V reverse rating blocks the 24 V rail from the host's VBUS | header footprint only; B5819W SL (C8598, basic) |
 | UI | GPIO9 button kept (boot/recovery, pin-hole in enclosure); one status LED (GPIO10); strip itself used as user feedback | — |
 | Configuration | Day to day: BLE GATT setup page (Web Bluetooth; Chrome on Mac, Bluefy on iPhone), LE Secure Connections with a 6-digit passkey on the label. Fallback: button long-press → on-device SoftAP serving the same page (works in Safari, no app, no internet) for 10 min. Factory reset: 10 s hold | firmware |
-| Removed | Relay + driver, AP63203 + VLS6045, SMBJ24A, B5819W, series SS34 reverse diode, USB-C, USBLC6, red error LED, green power LED | — |
-| Not doing | Photo-MOSFET SSR on the output (GAQY252G3S, Letex LT218: no PWM at ~0.4–0.8 ms turn-on, LT218 only 40 V), mmWave footprint, joining home Wi-Fi, AO3400A for reverse protection (lower loss, but 30 V and a second part number; the saving is ~0.02 W at 1.5 m) | — |
+| Removed | Relay + driver, AP63203 + VLS6045, SMBJ24A, B5819W on DC_IN (Rev A D4), series SS34 reverse diode, USB-C, USBLC6, red error LED, green power LED | — |
+| Not doing | Photo-MOSFET SSR on the output (GAQY252G3S, Letex LT218: no PWM at ~0.4–0.8 ms turn-on, LT218 only 40 V), mmWave footprint, joining home Wi-Fi, AO3400A (30 V: too little margin on a 24 V rail, and no TVS with a 24 V standoff clamps below it), HL2310A (on-resistance not specified below a 4.5 V gate), AO3422 (55 V, but only ≤ 200 mΩ guaranteed at a 2.5 V gate), input damping network and hot-plug test (hot-plug waived 2026-10-02) | — |
 
-Extended (fee) lines: ESP32-C3 module, buck, inductor, connector = 4. No no-fee inductor exists
+Extended (fee) lines: ESP32-C3 module, buck, inductor, connector, MOSFET, fuse = 6. No no-fee inductor exists
 at JLCPCB, so a zero-fee buck is not possible.
 
 **Enclosure:** inline slide-in tube with two identical end caps (one STL, printed twice), each
@@ -45,21 +46,23 @@ headroom, tube 12.2 mm tall); module antenna flush with the +Y edge.
 
 ### 0.1 Thermal budget and PCB layout for heat
 
-Steady state is reached in 20–30 min (MOSFET in 1–2 min per HL2310A Fig. 9), so long
+Steady state is reached in 20–30 min (the MOSFETs within a few minutes), so long
 retriggering = permanently on; design for 100 % on with no time limit. Estimates, closed tube
 in 35 °C ambient, tube shedding ≈ 20 °C/W:
 
 | | 1.5 m / 0.5 A | 3 m / 1.0 A |
 |---|---|---|
-| Output HL2310A, full on (typ / worst) | 0.03 / 0.08 W | 0.13 / 0.30 W |
-| Output HL2310A, ~90 % PWM, 33 Ω gate (worst) | ≈ 0.1 W | ≈ 0.35 W |
-| Reverse-protection HL2310A (≤ 105 mΩ at 10 V gate) | ≤ 0.03 W | ≤ 0.1 W |
+| Output SI2356DS, full on (typ / worst) | 0.015 / 0.02 W | 0.06 / 0.085 W |
+| Output SI2356DS, ~90 % PWM, 33 Ω gate (worst) | ≈ 0.03 W | ≈ 0.10 W |
+| Reverse-protection SI2356DS (≤ 51 mΩ at 10 V gate) | ≤ 0.015 W | ≤ 0.06 W |
 | ESP32-C3 + buck | ≈ 0.35 W | ≈ 0.35 W |
-| Air inside the tube | ≈ 45 °C | ≈ 48–50 °C |
-| Output MOSFET junction (Tj max 150 °C) | ≈ 50 °C | ≈ 65 °C typ, 90–105 °C worst |
+| Air inside the tube | ≈ 43 °C | ≈ 45 °C |
+| Output MOSFET junction (Tj max 150 °C) | ≈ 50 °C | ≈ 65 °C worst |
 
-HL2310A datasheet (Rev 2.1): Tj max 150 °C, RθJA 104 °C/W (mounting not stated; on this board
-expect 130–180 °C/W), PD 1.2 W at 25 °C. SOT-23 has no exposed pad: heat leaves through the
+Worst case = datasheet maximum on-resistance at a 2.5 V gate (70 mΩ) × 1.2 for a warm junction;
+switching loss estimated at ~100 ns total edge time per cycle. SI2356DS datasheet (Vishay
+62893, Rev. A): Tj max 150 °C, RthJA 175 °C/W max steady state on 1" × 1" FR4, junction-to-foot
+(drain) 75 °C/W max. SOT-23 has no exposed pad: heat leaves through the
 leads, mainly drain pin 3, so the copper on the drain net is the heatsink. The real limit is
 the PETG tube and the 85 °C connectors, not the MOSFET.
 
@@ -108,8 +111,8 @@ the PETG tube and the 85 °C connectors, not the MOSFET.
 
    The strip and its cable are outside the board's control; this keeps the board's own
    contribution small.
-8. **Input:** TVS next to the IN connector, after the reverse-protection MOSFET; damping R/C
-   footprint (DNP) beside it.
+8. **Input:** fuse directly at the IN connector's + pin, then the TVS; TVS after the
+   reverse-protection MOSFET.
 9. **Test access:** a bare copper test pad on the output drain pour for a thermocouple, and
    test points on drain and GND for measuring V_DS at full on during the soak test.
 

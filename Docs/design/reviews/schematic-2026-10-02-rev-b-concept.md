@@ -1,0 +1,37 @@
+# ESP32C3 Relay Module Rev B (24 V LED-strip controller) — pre-schematic concept review — 2026-10-02
+Run: full (concept) · Variants: none · Gate: schematic (pre-capture) · Checklist: v1.3
+Source: `Hardware/Rev-B-Notes.md` §0/§0.1 (commit 6c3bc35) + vendor PDFs: HL2310A Rev 2.1 (LCSC C7420347), ESP32-C3 datasheet v2.4, TI TPS560430, hongjiacheng BZT52C10 and SMBJ26A. No Rev B schematic exists, so there is no netlist.
+Scope: the design as written in the notes, with the output MOSFET stage and the reverse-polarity MOSFET in depth.
+Coverage: 12 items judged · 0 Blocker · 3 Major (all closed) · 4 Minor (1 closed) · 2 Advisory · 3 pass · all netlist-dependent items not assessable
+Carried deferrals (not re-raised): none (no review profile exists)
+Waiver: Karl 2026-10-02: hot-plugging a live 24 V lead is not a design case. The hot-plug test and the DNP input damping network are dropped; a 40 V output MOSFET is accepted on that basis.
+
+## Method note
+This is a review of a written plan, not of a circuit. Everything that needs connectivity (FUNC-1/3/5/6, PWR-3/4, LIB-*, BOM-*, DOC-1) is not assessable until the schematic is drawn. AON7264E was not checked against its datasheet. In disposition round 1 the SI2356DS (Vishay 62893 Rev. A) and AO3422 (AOS Rev 2.1) were read from the manufacturer PDFs; the fuse ratings are from the JLCPCB listing only.
+
+## Findings (most severe first)
+| ID | Sev | Status | Ref | Note (source) | Disposition |
+|----|-----|--------|-----|---------------|-------------|
+| PROT-3 | Major | finding | input / output stage | No overcurrent protection anywhere. A shorted output puts 24 V across the output FET with a 3.3 V gate: it saturates at roughly 8-10 A (HL2310A Fig. 1, VGS = 3 V curve), about 200 W, outside the SOA (Fig. 7). It will fail, usually shorted, and the supply's full current then flows continuously through two SOT-23s inside a closed PETG tube. Proposed: fuse in the +24 V input (about 2 A, slow) and a stated supply requirement. | closed 2026-10-02 — Karl 2026-10-02: add Littelfuse 0466002.NRHF (C3105), 2 A fast-acting 1206, 63 V, in the +24 V input ahead of the TVS (fast-acting chosen because there is no inrush). Supply requirement still not stated; tracked under DOC-4 |
+| PART-2a | Major | finding | output FET gate drive | On-resistance at 3.3 V gate is not specified (guaranteed only at 4.5 V and 10 V; VGS(th) 0.9-2.0 V, p.2). Fig. 1 gives about 125 mΩ typ at VGS = 3 V and about 200 mΩ at 2.5 V; a high-threshold part at 75 °C lands near 0.25 Ω, inside the notes' 0.30 W worst case. Separately, Fig. 6 shows the Miller plateau at 3.2-3.4 V (3 A) while Fig. 2 implies about 2.3 V; if Fig. 6 is right, a 3.3 V drive has almost no headroom and turn-on stretches to microseconds (each 100 ns of edge costs about 23 mW at 1 A, 19.5 kHz). Proposed: add drain fall-time at 1 A to the bring-up tests (pass under about 200 ns), and make the fallback a FET specified at 2.5 V gate. | closed 2026-10-02 — Karl 2026-10-02: output and reverse-protection MOSFET changed to Vishay SI2356DS (C74127): ≤ 70 mΩ guaranteed at 2.5 V gate, V_GS(th) 0.6–1.5 V, 40 V, V_GS ±12 V. Worst case at 1 A is about 0.085 W. The fall-time test is no longer needed. AO3422 rejected (≤ 200 mΩ at 2.5 V); AO3400A rejected (30 V) |
+| FUNC-2 | Major | finding | PWM GPIO | The notes do not name the PWM pin. It decides whether the strip stays off through reset: MTCK/GPIO6 has its weak pull-up on by default (45 kΩ against the 100 kΩ pull-down puts about 2.3 V on the gate); GPIO18 has a 50 µs high glitch at power-up; GPIO2/8/9 are straps. MTDO/GPIO7 (Rev A's relay pin) has no pull at reset and only a 5 ns low glitch (ESP32-C3 datasheet Tables 2-1, 2-2). Proposed: GPIO7, and 10 kΩ rather than 100 kΩ pull-down. | closed 2026-10-02 — Karl 2026-10-02: PWM on GPIO7, 10 kΩ gate pull-down (C25744). GPIO0/1/3/4/5 were equally safe; GPIO7 chosen for continuity with Rev A firmware |
+| THRM-1 | Minor | finding | firmware rule 2 | Dimming to 70 % barely reduces heat in the tube: at 3 m worst case 0.75 W becomes about 0.71 W, because switching loss is added, conduction only falls with duty, and the 0.35 W of ESP32 + buck is unchanged. The fallback protects nothing as specified. | open |
+| PART-1 | Minor | finding | SS34 freewheel | 40 V rating; with the output on it sees the full rail, which the TVS allows to reach 42.1 V at rated pulse current (SMBJ26A table). A 60 V Schottky removes the question; a 1 A SOD-123 part would also shrink the loop. | open. Note 2026-10-02: the output MOSFET is now also 40 V, so the same full-pulse clamp figure applies to it; with hot-plug waived the TVS only sees low-current events, where it clamps near its 28.9–31.9 V breakdown |
+| PWR-7 | Minor | closed 2026-10-02 | USB header 5 V diode | Diode part not named (B5819W is on the removed list). Needs at least 40 V reverse rating; it blocks 24 V from the host's VBUS. | Karl 2026-10-02: same part as Rev A D6 (VBUS → VIN, Rev A netlist), B5819W SL (C8598, basic), 40 V / 1 A. Notes' removed list corrected to name only Rev A D4 |
+| DOC-4 | Minor | finding | repo | No design spec or review profile: max ambient (35 °C is assumed in §0.1), supply requirement and test strategy are not stated as inputs. | open |
+| IF-4 | Advisory | finding | PWM low end | One LSB is 12.5 ns against edges of 30-100 ns or more, with turn-on slower than turn-off, so the lowest codes give no light and the bottom of a fade is non-linear. Needs a minimum duty and a lookup table in firmware. | open |
+| PWR-2 | Advisory | finding | USB header ground | Board GND is not the input − terminal. With an earthed 24 V supply and an earthed PC both attached, the earth path bypasses the reverse FET; worked through for both polarities, nothing is overstressed. | open |
+
+## Coverage table (items judged)
+| ID | Status | Note |
+|----|--------|------|
+| PROT-2 | pass | Reverse FET topology correct: reversed, body diode blocks 24 V of 40 V (SI2356DS), gate sits at source. Normal: zener bias (24-10)/100 k = 0.14 mA, gate about 10 V (zener max 10.5 V against the ±12 V gate limit), RDS(on) ≤ 51 mΩ guaranteed. Originally judged with HL2310A (60 V, ≤ 105 mΩ). |
+| PROT-5 | pass | SMBJ26A standoff 26 V > 24 V; breakdown 28.9-31.9 V; buck abs max 38 V was covered by the notes' hot-plug test (pass < 36 V); that test is dropped under the 2026-10-02 waiver. |
+| PWR-1 | pass | TPS560430X3F 600 mA vs about 350 mA peak; 10 µH gives 0.26 A ripple at 24 V, peak about 0.48 A < 0.8 A minimum current limit; on-time 125 ns > 60 ns minimum. |
+| PART-2 | closed | See PART-2a. |
+
+## Not assessable at this gate
+FUNC-1, FUNC-3..7, PWR-3..6, PWR-8, PROT-1, PART-3..5, IF-1..3, IF-5, EMC-1..2, TEST-1..5, BOM-1..3, LIB-1..7, DOC-1..3, and the whole layout gate: all need the Rev B schematic or board.
+
+## Gate status
+OPEN — no open Blocker or Major; 3 Minor and 2 Advisory open. Not a gate close; the schematic does not exist yet.
