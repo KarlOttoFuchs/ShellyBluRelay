@@ -15,7 +15,7 @@ COB strips and cupboard lights, triggered by Shelly BLU sensors. Settled in desi
 | Load | 24 V COB strip, 8 W/m. Main use 1.5 m = 12 W, 0.5 A. Rated up to 3 m = 24 W, 1.0 A continuous, subject to the soak test below | — |
 | Output | Low-side N-MOSFET, gate driven directly from GPIO. On-resistance is guaranteed at a 2.5 V gate (≤ 70 mΩ, V_GS(th) 0.6–1.5 V), so the 3.3 V drive is inside the datasheet. 40 V rating is adequate because the board is never hot-plugged (see Input protection). Changed 2026-10-02 from HL2310A, which is specified only at 4.5 V and 10 V | Vishay SI2356DS-T1-GE3, 40 V / 4.3 A, V_GS ±12 V (C74127, extended) |
 | | PWM on GPIO7 (MTDO, Rev A's relay pin): no internal pull at reset and only a 5 ns low glitch (ESP32-C3 datasheet Tables 2-1/2-2), so the strip stays off through power-up, the ROM bootloader and flashing. Avoid GPIO6 (pull-up at reset), GPIO18/19 (USB; GPIO18 has a 50 µs high glitch), GPIO20/21 (UART, pulled up), GPIO2/8/9 (straps) | firmware / schematic |
-| | 33 Ω gate series (faster edges, lower switching loss), GPIO at maximum drive strength (`GPIO_DRIVE_CAP_3`), 10 kΩ gate pull-down (off through reset/flash; holds the gate low even against an internal 45 kΩ pull-up; 0.33 mA while on). Changed 2026-10-02 from 100 kΩ | C25105, C25744 |
+| | 100 Ω gate series (changed 2026-10-02 from 33 Ω: the SI2356DS Miller plateau is ≈ 1.6 V, so a 3.3 V drive has ample margin; ≈ 55–60 ns drain transitions halve the edge rate into the strip cable near the BLE radio and the drain overshoot, and keep the GPIO under its 40 mA rating, for ≈ +15 mW switching loss at 1 A), GPIO at maximum drive strength (`GPIO_DRIVE_CAP_3`), 10 kΩ gate pull-down (off through reset/flash; holds the gate low even against an internal 45 kΩ pull-up; 0.33 mA while on). Changed 2026-10-02 from 100 kΩ | C25076, C25744 |
 | | Freewheel Schottky across the strip (DC-only output) | SS34 (C8678) |
 | | Local +24 V → GND bypass at the output stage: supplies the fast current edge at each turn-on locally instead of from the buck's input capacitors at the far end of the board. 1 µF 50 V X7R 0805; at 24 V DC bias expect roughly half that, which is enough for edge current | Samsung CL21B105KBFNNNE (C28323) |
 | | PWM 19.5 kHz, 12-bit (LEDC) — inaudible, smooth fades | firmware |
@@ -53,14 +53,14 @@ in 35 °C ambient, tube shedding ≈ 20 °C/W:
 | | 1.5 m / 0.5 A | 3 m / 1.0 A |
 |---|---|---|
 | Output SI2356DS, full on (typ / worst) | 0.015 / 0.02 W | 0.06 / 0.085 W |
-| Output SI2356DS, ~90 % PWM, 33 Ω gate (worst) | ≈ 0.03 W | ≈ 0.10 W |
+| Output SI2356DS, ~90 % PWM, 100 Ω gate (worst) | ≈ 0.035 W | ≈ 0.11 W |
 | Reverse-protection SI2356DS (≤ 51 mΩ at 10 V gate) | ≤ 0.015 W | ≤ 0.06 W |
 | ESP32-C3 + buck | ≈ 0.35 W | ≈ 0.35 W |
 | Air inside the tube | ≈ 43 °C | ≈ 45 °C |
 | Output MOSFET junction (Tj max 150 °C) | ≈ 50 °C | ≈ 65 °C worst |
 
 Worst case = datasheet maximum on-resistance at a 2.5 V gate (70 mΩ) × 1.2 for a warm junction;
-switching loss estimated at ~100 ns total edge time per cycle. SI2356DS datasheet (Vishay
+switching loss estimated from ≈ 55–60 ns per edge (100 Ω gate + ≈ 17 Ω GPIO driver, typical Qgd 0.81 nC at a ≈ 1.6 V plateau, datasheet p.3); edges slow to ≈ 80 ns with a hot junction. SI2356DS datasheet (Vishay
 62893, Rev. A): Tj max 150 °C, RthJA 175 °C/W max steady state on 1" × 1" FR4, junction-to-foot
 (drain) 75 °C/W max. SOT-23 has no exposed pad: heat leaves through the
 leads, mainly drain pin 3, so the copper on the drain net is the heatsink. The real limit is
@@ -86,7 +86,7 @@ the PETG tube and the 85 °C connectors, not the MOSFET.
    rails and hold-down ribs touch the board.
 6. **Current paths for 1 A:** +24 V, input −/GND return and LED−/LED+ as pours or ≥ 1.0 mm
    traces on 1 oz copper. 2 oz copper is optional, not needed.
-7. **Switching loop:** at every PWM edge up to 1 A moves between two paths in ~100 ns. With
+7. **Switching loop:** at every PWM edge up to 1 A moves between two paths in ~60 ns. With
    the MOSFET on, current runs +24 V → LED+ → strip → LED− → MOSFET → GND. At turn-off the
    strip/cable inductance keeps it flowing round LED− → SS34 → LED+ → strip. Any loop
    carrying that changing current radiates (proportional to its area: unwelcome next to the
