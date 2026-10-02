@@ -2,7 +2,7 @@
 Run: full (concept) · Variants: none · Gate: schematic (pre-capture) · Checklist: v1.3
 Source: `Hardware/Rev-B-Notes.md` §0/§0.1 (commit 6c3bc35) + vendor PDFs: HL2310A Rev 2.1 (LCSC C7420347), ESP32-C3 datasheet v2.4, TI TPS560430, hongjiacheng BZT52C10 and SMBJ26A. No Rev B schematic exists, so there is no netlist.
 Scope: the design as written in the notes, with the output MOSFET stage and the reverse-polarity MOSFET in depth.
-Coverage: 12 items judged · 0 Blocker · 3 Major (all closed) · 4 Minor (3 closed, 1 accepted) · 2 Advisory · 3 pass · all netlist-dependent items not assessable
+Coverage: 12 items judged · 0 Blocker · 3 Major (all closed) · 4 Minor (3 closed, 1 accepted) · 2 Advisory (1 closed) · 3 pass · all netlist-dependent items not assessable
 Board: since 2026-10-02 this is `FEHA-LSC-001-01` Rev A (Controller), a new product number; the "Rev B" in this register's title and notes refers to the same board.
 Carried deferrals (not re-raised): none (no review profile exists)
 Waiver: Karl 2026-10-02: hot-plugging a live 24 V lead is not a design case. The hot-plug test and the DNP input damping network are dropped; a 40 V output MOSFET is accepted on that basis.
@@ -21,7 +21,7 @@ This is a review of a written plan, not of a circuit. Everything that needs conn
 | PWR-7 | Minor | closed 2026-10-02 | USB header 5 V diode | Diode part not named (B5819W is on the removed list). Needs at least 40 V reverse rating; it blocks 24 V from the host's VBUS. | Karl 2026-10-02: same part as Rev A D6 (VBUS → VIN, Rev A netlist), B5819W SL (C8598, basic), 40 V / 1 A. Notes' removed list corrected to name only Rev A D4 |
 | DOC-4 | Minor | finding | repo | No design spec or review profile: max ambient (35 °C is assumed in §0.1), supply requirement and test strategy are not stated as inputs. | closed 2026-10-02 — Karl 2026-10-02: design spec `led-strip-controller-design.md` created; operating range 0–35 °C (DEC-18), no ESD protection (DEC-19), functional test strategy (DEC-20), supply Futurelight PS002A 24 V 30 W (DEC-21). review_readiness.py reports no findings |
 | IF-4 | Advisory | finding | PWM low end | One LSB is 12.5 ns against edges of 30-100 ns or more (≈ 55–60 ns with the 100 Ω gate chosen 2026-10-02, so the first ~5 codes give no light), with turn-on slower than turn-off, so the lowest codes give no light and the bottom of a fade is non-linear. Needs a minimum duty and a lookup table in firmware. | open |
-| PWR-2 | Advisory | finding | USB header ground | Board GND is not the input − terminal. With an earthed 24 V supply and an earthed PC both attached, the earth path bypasses the reverse FET; worked through for both polarities, nothing is overstressed. | open |
+| PWR-2 | Advisory | finding | USB header ground | Board GND is not the input − terminal. With an earthed 24 V supply and an earthed PC both attached, the earth path bypasses the reverse FET; worked through for both polarities, nothing is overstressed. | closed 2026-10-02 — **Correction:** the original note is wrong for reversed polarity. With an earthed supply output, a reversed lead and USB on an earthed host, the +24 V net sits at earth and host VBUS is shorted through the B5819W to earth; the host's port over-current limit normally ends it (diode 1 A continuous, 9 A surge). Normal polarity: harmless ground loop in parallel with the reverse MOSFET. A floating supply output (PS002A earthing unknown; check V− to earth for continuity) closes no loop. Karl 2026-10-02: procedural rule, USB and 24 V never connected together (DEC-24, spec §10) |
 
 ## Coverage table (items judged)
 | ID | Status | Note |
@@ -35,4 +35,4 @@ This is a review of a written plan, not of a circuit. Everything that needs conn
 FUNC-1, FUNC-3..7, PWR-3..6, PWR-8, PROT-1, PART-3..5, IF-1..3, IF-5, EMC-1..2, TEST-1..5, BOM-1..3, LIB-1..7, DOC-1..3, and the whole layout gate: all need the Rev B schematic or board.
 
 ## Gate status
-OPEN — no open Blocker, Major or Minor; 2 Advisory open. Not a gate close; the schematic does not exist yet.
+OPEN — no open Blocker, Major or Minor; 1 Advisory open (IF-4, low-end PWM). Not a gate close; the schematic does not exist yet.

@@ -77,7 +77,9 @@ USB 5 V (debug header) ─ B5819W SL ─ buck VIN
 - **Inductor** (DEC-08): 10 µH molded, Isat 2.2 A against the IC's 1.4 A maximum peak limit; TI's
   table suggests 12 µH. At 24 V in, ripple ≈ 0.26 A, peak ≈ 0.48 A, under the 0.8 A minimum
   current limit. Verify on the scope at bring-up.
-- **USB 5 V** (DEC-14): via a Schottky into buck VIN, for flashing without the 24 V supply.
+- **USB 5 V** (DEC-14): via a Schottky into buck VIN, for flashing without the 24 V supply. USB
+  ground is board GND, which bypasses the reverse-polarity MOSFET, so USB and the 24 V supply are
+  never connected at the same time (DEC-24, §10).
 - **Supply** (DEC-21): Futurelight PS002A, 24 V DC, 30 W = 1.25 A rated, surge protected, IP20,
   135 × 35 × 23 mm. Load at 3 m ≈ 1.0 A strip + ≈ 15 mA board = 82 % of rating; at 1.5 m ≈ 42 %.
   The retail page publishes no overcurrent behaviour (hiccup or constant-current, and at what
@@ -241,8 +243,10 @@ No no-fee power inductor exists at JLCPCB, so a zero-fee buck is not possible.
 
 - **Test-point plan:** bare copper pad on the output drain pour for a thermocouple; test points
   on the output drain and GND for V_DS at full on. Further rail test points: TBD with the schematic.
-- **Functional test** (each board, by hand on the bench): power from 24 V and check +3V3; flash
-  over the USB header; strip on, full brightness (static high) and a fade; button press and
+- **USB rule** (DEC-24): flash and debug over the USB header with the 24 V supply disconnected;
+  the board runs from USB alone. Disconnect USB before connecting 24 V.
+- **Functional test** (each board, by hand on the bench): flash over the USB header (24 V
+  disconnected); remove USB, power from 24 V and check +3V3; strip on, full brightness (static high) and a fade; button press and
   long-press (SoftAP opens); status LED; a trigger from a paired Shelly BLU device switches
   the strip; reversed 24 V input leaves the board unpowered and undamaged (one board per batch).
 - **Soak test (3 m / 1 A only; also sets the DEC-23 cut-off threshold from the measured die temperature):** closed printed tube, 60 min at full brightness, then 60 min at
@@ -281,6 +285,7 @@ No no-fee power inductor exists at JLCPCB, so a zero-fee buck is not possible.
 | DEC-21 | 2026-10-02 | Supply: Futurelight PS002A 24 V 30 W surge-protected LED supply | Karl's chosen supply; 1.25 A covers 3 m at 82 %; its current limit protects the output stage from a shorted strip |
 | DEC-22 | 2026-10-02 | Keep the 40 V SS34 freewheel; no 60 V part | 24 V is 60 % of rating; rail never reaches the TVS breakdown with hot-plug waived; the 40 V output MOSFET has the same exposure, so a 60 V diode alone adds no margin |
 | DEC-23 | 2026-10-02 | Replace the dim-to-70 % thermal fallback with a fault cut-off (strip off above ≈ 85 °C die) | Dimming saves ≈ 0.02 W of ≈ 0.5 W in the tube (≈ 0.4 °C); tube air worst case ≈ 45 °C vs the 65 °C wall limit; the die sensor tracks the ESP32, not the MOSFET or tube wall |
+| DEC-24 | 2026-10-02 | USB header and 24 V supply never connected together (procedural, no circuit change) | USB GND bypasses the reverse MOSFET: with an earthed supply output, a reversed lead and an earthed host, host VBUS is shorted through the B5819W. The board runs from USB alone for flashing |
 | DEC-19 | 2026-10-02 | No ESD protection on the terminals or USB header | Terminals wired unpowered; USB bench-only; board enclosed |
 | DEC-20 | 2026-10-02 | Test strategy: functional, JLCPCB PCBA, small batches | Low volume; no fixture or ATE |
 
