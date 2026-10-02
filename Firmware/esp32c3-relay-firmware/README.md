@@ -159,7 +159,7 @@ esp32c3-relay-firmware/
 ## Documentation
 
 - [Architecture & Protocol Details](docs/architecture.md)
-- [Hardware Pin Mapping](../../Hardware/ESP32C3-Pin-Mapping.md)
+- [Hardware Pin Mapping](../../Hardware/ESP32C3-Relay-Module-Rev-A/ESP32C3-Pin-Mapping.md)
 
 ## License
 

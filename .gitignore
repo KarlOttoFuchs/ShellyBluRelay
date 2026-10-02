@@ -20,6 +20,15 @@ _autosave-*
 *-save.kicad_pcb
 fp-info-cache
 
+# KiCad lock and sync-service conflict copies (iCloud/Dropbox duplicate files as "name 2.ext")
+~*.kicad_*
+* [2-9].*
+* [2-9]
+
+# VS Code "Local History" extension and machine-specific Claude settings
+.history/
+.claude/settings.local.json
+
 # FreeCAD backup files (written on every save)
 *.FCBak
 

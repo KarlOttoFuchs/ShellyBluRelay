@@ -141,7 +141,7 @@ idf.py monitor -p /dev/ttyUSB0
 ## Documentation
 
 - [Architecture & Serial Protocol](Firmware/esp32c3-relay-firmware/docs/architecture.md)
-- [Hardware Pin Mapping](Hardware/ESP32C3-Pin-Mapping.md)
+- [Hardware Pin Mapping](Hardware/ESP32C3-Relay-Module-Rev-A/ESP32C3-Pin-Mapping.md)
 - [Firmware README](Firmware/esp32c3-relay-firmware/README.md)
 
 ## License
