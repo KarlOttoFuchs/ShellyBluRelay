@@ -1,5 +1,10 @@
 # ESP32-C3 Relay Module - Rev B Change Notes
 
+> **Archived 2026-10-02.** This planned "Rev B" became a new product, `FEHA-LSC-001` (LED Strip
+> Controller). Its live design is [`../led-strip-controller-design.md`](../led-strip-controller-design.md);
+> this file is kept as the record of how the decisions were reached. Only the enclosure paths
+> below were updated, to keep the links working.
+
 Running list of changes to fold into the next board re-spin. Nothing here is applied to
 Rev A; the Rev A schematic/PCB are unchanged.
 
@@ -38,8 +43,8 @@ at JLCPCB, so a zero-fee buck is not possible.
 with a screw tab centred under its cable exit; caps click on with snap detents, no screws or
 inserts (once mounted, the two tab screws fix the caps and trap the tube); overall
 119.4 × 27.8 × 15.8 mm —
-concept and dimensions in [`../Enclosure/Rev-B/enclosure-concept.html`](../Enclosure/Rev-B/enclosure-concept.html),
-parametric model `../Enclosure/Rev-B/enclosure_rev_b.py`. Board constraints it imposes:
+concept and dimensions in [`../../../Enclosure/FEHA-LSC-001-02-Enclosure-Rev-A/enclosure-concept.html`](../../../Enclosure/FEHA-LSC-001-02-Enclosure-Rev-A/enclosure-concept.html),
+parametric model `../../../Enclosure/FEHA-LSC-001-02-Enclosure-Rev-A/enclosure_rev_b.py`. Board constraints it imposes:
 66 × 20 mm placeholder outline; top side clear within 1.5 mm of both long edges over the last
 10 mm at each end (hold-down ribs); no component taller than the 4.5 mm connectors (5.5 mm
 headroom, tube 12.2 mm tall); module antenna flush with the +Y edge.

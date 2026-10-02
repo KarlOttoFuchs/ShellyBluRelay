@@ -1,0 +1,36 @@
+# hardware-design-review configuration for FEHA-LSC-001-01 (LED Strip Controller PCB).
+# Read by the hardware-design-review skill. Deferrals recorded here persist across review
+# passes, so settled findings are carried instead of re-raised.
+
+current_gate: schematic
+
+# Checklist version this profile's fields were written against. The hardware-project-conventions
+# readiness audit compares it to the review skill's current version and lists what is missing.
+schema: 1.3
+
+# How a built board is proven — `functional` (assembler AOI + firmware/bench/jig functional
+# test) or `ate` (in-circuit / flying probe) — with the volume it assumes. TEST-3/TEST-5/L-DFA-4
+# and every external testability finding are judged against this.
+test_strategy: TBD   # proposed: functional (JLCPCB PCBA, small batches) — Karl to confirm
+
+# Checklist version of the run that closed the last gate (skill records this at gate close).
+closed_with_checklist: null
+
+# All master-checklist domains enabled; disable per-project only with a reason.
+domains: {}
+
+# Bump a master item's severity for this project, e.g.  PWR-3: Blocker
+severity_overrides: {}
+
+# Project-specific must-check rows; each links to a master item ID. Generate these from the
+# checkable CON-nn rows in the design spec's §1.1 constraints table.
+project_rules: []
+
+# Settled/accepted findings — the review lists these as carried deferrals and does NOT
+# re-raise them. This file is the canonical home of deferral STATUS; each entry records the
+# date and a REFERENCE to the record owning the reasoning (CHG-nn in DESIGN-CHANGES.md,
+# DEC-nn in the design spec, or a register disposition) — never restate the reasoning here.
+deferrals:
+  - id: hot-plug
+    date: 2026-10-02
+    ref: DEC-11   # hot-plug waived; no damping network, no hot-plug test

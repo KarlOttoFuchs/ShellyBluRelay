@@ -3,6 +3,7 @@ Run: full (concept) · Variants: none · Gate: schematic (pre-capture) · Checkl
 Source: `Hardware/Rev-B-Notes.md` §0/§0.1 (commit 6c3bc35) + vendor PDFs: HL2310A Rev 2.1 (LCSC C7420347), ESP32-C3 datasheet v2.4, TI TPS560430, hongjiacheng BZT52C10 and SMBJ26A. No Rev B schematic exists, so there is no netlist.
 Scope: the design as written in the notes, with the output MOSFET stage and the reverse-polarity MOSFET in depth.
 Coverage: 12 items judged · 0 Blocker · 3 Major (all closed) · 4 Minor (1 closed) · 2 Advisory · 3 pass · all netlist-dependent items not assessable
+Board: since 2026-10-02 this is `FEHA-LSC-001-01` Rev A (Controller), a new product number; the "Rev B" in this register's title and notes refers to the same board.
 Carried deferrals (not re-raised): none (no review profile exists)
 Waiver: Karl 2026-10-02: hot-plugging a live 24 V lead is not a design case. The hot-plug test and the DNP input damping network are dropped; a 40 V output MOSFET is accepted on that basis.
 

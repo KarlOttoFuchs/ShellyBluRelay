@@ -1,0 +1,43 @@
+# Temporary files
+*.000
+*.bak
+*.bck
+*.kicad_pcb-bak
+*.kicad_sch-bak
+*.kicad_prl
+*.sch-bak
+*.lck
+*~
+_autosave-*
+*.tmp
+*-save.pro
+*-save.kicad_pcb
+fp-info-cache
+/build
+
+# Netlist files (exported from Eeschema)
+*.net
+
+# Autorouter files (exported from Pcbnew)
+*.dsn
+*.ses
+
+# Footprint association file (exported from Pcbnew)
+*.cmp
+
+# Exported BOM files
+*.xml
+*.csv
+*.tsv
+
+# Misc
+*.log
+*.raw
+
+# Backup files
+*-backups
+
+# Fab outputs are deliverables for this revision — keep production/ tracked even though
+# loose exports (*.net, *.csv, *.zip elsewhere) are ignored above.
+!production/
+!production/**

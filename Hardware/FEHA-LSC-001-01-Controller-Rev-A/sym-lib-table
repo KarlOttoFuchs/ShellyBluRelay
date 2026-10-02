@@ -1,0 +1,3 @@
+(sym_lib_table
+  (lib (name "_FEHA-LSC-001")(type "KiCad")(uri "${KIPRJMOD}/Library/_FEHA-LSC-001.kicad_sym")(options "")(descr "Project schematic symbols"))
+)

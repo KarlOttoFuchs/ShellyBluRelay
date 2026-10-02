@@ -1,0 +1,19 @@
+{
+  "meta": {
+    "filename": "FEHA-LSC-001-01-Controller-Rev-A.kicad_pro",
+    "version": 3
+  },
+  "sheets": [
+    [
+      "b6e06938-22b9-4085-a332-ab512658a3b8",
+      "Root"
+    ]
+  ],
+  "text_variables": {
+    "Company Name": "FEHA",
+    "Designed By": "Karl Fuchs",
+    "Part Number": "FEHA-LSC-001-01",
+    "Project Title": "LED Strip Controller",
+    "Revision": "A"
+  }
+}

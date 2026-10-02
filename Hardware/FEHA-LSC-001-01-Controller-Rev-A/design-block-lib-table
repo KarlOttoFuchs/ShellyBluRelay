@@ -1,0 +1,4 @@
+(design_block_lib_table
+  (version 7)
+  (lib (name "_FEHA-LSC-001")(type "KiCad")(uri "${KIPRJMOD}/Library/_FEHA-LSC-001.kicad_blocks")(options "")(descr "Project design blocks — reusable schematic/layout fragments"))
+)
