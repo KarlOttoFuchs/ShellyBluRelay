@@ -16,11 +16,10 @@ Last updated: 2026-10-02
   (DEC-09…DEC-12), connectors, USB, UI and enclosure (DEC-13…DEC-16). Concept review register:
   [`reviews/schematic-2026-10-02-rev-b-concept.md`](reviews/schematic-2026-10-02-rev-b-concept.md)
   (no open Blocker or Major).
-- **Open questions:** operating-temperature range, ESD exposure and test strategy (§1); the
-  supply requirement (§2); SS34 voltage margin, thermal-fallback effectiveness and low-end PWM
+- **Open questions:** the supply's overcurrent behaviour (not published; bench test in §10); SS34 voltage margin, thermal-fallback effectiveness and low-end PWM
   linearity (open register rows).
 - **Blocked on:** —
-- **Next:** answer the §1 TBD rows, then draw the schematic in
+- **Next:** draw the schematic in
   `Hardware/FEHA-LSC-001-01-Controller-Rev-A/`.
 
 ## 1. What this board is
@@ -31,15 +30,15 @@ Shelly BLU sensors over BLE, in an inline printed tube between the power supply 
 | | |
 |---|---|
 | MCU | ESP32-C3 module (antenna flush with the board's +Y edge) |
-| Power source | External 24 V DC supply, also feeding the strip; USB 5 V via the debug header for bring-up |
+| Power source | Futurelight PS002A, 24 V DC 30 W (1.25 A) surge-protected LED supply, IP20, also feeding the strip (DEC-21); USB 5 V via the debug header for bring-up |
 | Comms | BLE (Shelly BLU / BTHome triggers, GATT setup page); SoftAP fallback for setup only |
-| Operating temperature | TBD — Karl. Thermal budget (§7) assumes 35 °C ambient around the tube |
+| Operating temperature | 0 to 35 °C ambient around the tube (DEC-18); the §7 thermal budget is worked at the 35 °C top of the range |
 | Ingress / exposure | Indoor, inside kitchen cabinets and cupboards; closed PETG tube, not sealed |
 | Mains / SELV class | SELV only (24 V DC); no mains on the board |
-| ESD exposure | TBD — Karl. Field-wired push-in terminals; USB header used only on the bench |
+| ESD exposure | None designed for (DEC-19): push-in terminals are wired with the supply off, the USB header is bench-only, and the board lives inside a closed tube |
 | EMC target | None formal at prototype; keep switching loops small near the BLE radio (§7 rule 7) |
 | Enclosure | `FEHA-LSC-001-02`: slide-in tube, two identical snap-on end caps, 119.4 × 27.8 × 15.8 mm |
-| Test strategy | TBD — Karl (proposed: functional, JLCPCB PCBA, small batches; mirrors `review-profile.yml`) |
+| Test strategy | Functional, JLCPCB PCBA, small batches (DEC-20; mirrors `review-profile.yml`) |
 
 ### 1.1 Hard constraints and requirements (with sources)
 
@@ -56,8 +55,11 @@ Shelly BLU sensors over BLE, in an inline printed tube between the power supply 
 
 - **No hot-plug protection** (DEC-11): the board is never connected to a live 24 V lead. Exit:
   if that stops holding, add the input damping network and rerun a hot-plug test (VIN peak < 36 V).
-- **No overcurrent protection for the output MOSFET itself** (DEC-12): the fuse limits the
-  aftermath of a shorted output, not the MOSFET. Exit: a current-limited high-side switch.
+- **No overcurrent protection for the output MOSFET itself** (DEC-12): with the 30 W supply
+  (DEC-21) a shorted strip is current-limited by the supply at a collapsed voltage, so the
+  MOSFET carries ≈ 2 A at a few hundred mV, well inside its rating. This holds only for a
+  current-limited supply of this size; a stiff high-current supply would destroy the MOSFET.
+  Exit: a current-limited high-side switch. Verified by the short-circuit test (§10).
 
 ## 2. Power architecture
 
@@ -77,7 +79,12 @@ USB 5 V (debug header) ─ B5819W SL ─ buck VIN
   table suggests 12 µH. At 24 V in, ripple ≈ 0.26 A, peak ≈ 0.48 A, under the 0.8 A minimum
   current limit. Verify on the scope at bring-up.
 - **USB 5 V** (DEC-14): via a Schottky into buck VIN, for flashing without the 24 V supply.
-- **Supply requirement:** TBD — Karl (current limit of the intended 24 V supply; see §3 fuse).
+- **Supply** (DEC-21): Futurelight PS002A, 24 V DC, 30 W = 1.25 A rated, surge protected, IP20,
+  135 × 35 × 23 mm. Load at 3 m ≈ 1.0 A strip + ≈ 15 mA board = 82 % of rating; at 1.5 m ≈ 42 %.
+  The retail page publishes no overcurrent behaviour (hiccup or constant-current, and at what
+  level); measure it (§10). Because the supply's limit (typically 1.1–1.5 × rating, ≈ 1.4–1.9 A)
+  sits below the 2 A fuse, the supply, not the fuse, ends a short; the fuse covers a fault the
+  supply does not limit.
 
 ## 3. Input and protection
 
@@ -231,13 +238,19 @@ No no-fee power inductor exists at JLCPCB, so a zero-fee buck is not possible.
 
 - **Test-point plan:** bare copper pad on the output drain pour for a thermocouple; test points
   on the output drain and GND for V_DS at full on. Further rail test points: TBD with the schematic.
-- **Functional test:** TBD — Karl, once the test strategy (§1) is set. Candidates: strip
-  on/off/fade, button, status LED, BLE trigger from a Shelly BLU device.
+- **Functional test** (each board, by hand on the bench): power from 24 V and check +3V3; flash
+  over the USB header; strip on, full brightness (static high) and a fade; button press and
+  long-press (SoftAP opens); status LED; a trigger from a paired Shelly BLU device switches
+  the strip; reversed 24 V input leaves the board unpowered and undamaged (one board per batch).
 - **Soak test (3 m / 1 A only):** closed printed tube, 60 min at full brightness, then 60 min at
   90 % PWM; thermocouples on the output MOSFET drain copper and the tube's inner wall; measure
   V_DS at full on. Pass: tube wall < 65 °C (CON-4). Fail: move the output switch to AOS AON7264E
   (DFN 3×3, exposed pad, new footprint). 1.5 m needs no soak test.
 - **Buck:** check ripple and inductor current on the scope at 24 V in (DEC-08).
+- **Short circuit (one board, with the PS002A):** short LED+ to LED− with the output on, for
+  10 s. Record the supply's behaviour (hiccup or constant current, and the current). Pass: the
+  board keeps running from the buck or recovers when the short is removed, the output MOSFET and
+  fuse survive.
 - **Bring-up order:** TBD with the schematic.
 
 ## 11. Decision log
@@ -261,6 +274,10 @@ No no-fee power inductor exists at JLCPCB, so a zero-fee buck is not possible.
 | DEC-15 | 2026-10-01 | GPIO9 button and one status LED; strip used as feedback. Red error and green power LEDs removed | Enclosure is closed; fewer parts |
 | DEC-16 | 2026-10-01 | Inline slide-in tube enclosure (`FEHA-LSC-001-02`) | Sets CON-2 and CON-3 |
 | DEC-17 | 2026-10-01 | Not doing: mmWave footprint, joining home Wi-Fi | Out of scope for a BLE-triggered light |
+| DEC-18 | 2026-10-02 | Operating range 0 to 35 °C ambient | Indoor cabinets and cupboards; matches the §7 thermal budget |
+| DEC-21 | 2026-10-02 | Supply: Futurelight PS002A 24 V 30 W surge-protected LED supply | Karl's chosen supply; 1.25 A covers 3 m at 82 %; its current limit protects the output stage from a shorted strip |
+| DEC-19 | 2026-10-02 | No ESD protection on the terminals or USB header | Terminals wired unpowered; USB bench-only; board enclosed |
+| DEC-20 | 2026-10-02 | Test strategy: functional, JLCPCB PCBA, small batches | Low volume; no fixture or ATE |
 
 **Baseline rule:** until the first schematic gate closes, this table is a *baseline* — rows are
 edited in place, not superseded. After that gate, a changed decision gets

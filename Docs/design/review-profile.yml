@@ -11,7 +11,7 @@ schema: 1.3
 # How a built board is proven — `functional` (assembler AOI + firmware/bench/jig functional
 # test) or `ate` (in-circuit / flying probe) — with the volume it assumes. TEST-3/TEST-5/L-DFA-4
 # and every external testability finding are judged against this.
-test_strategy: TBD   # proposed: functional (JLCPCB PCBA, small batches) — Karl to confirm
+test_strategy: functional (JLCPCB PCBA, small batches)   # DEC-20
 
 # Checklist version of the run that closed the last gate (skill records this at gate close).
 closed_with_checklist: null
