@@ -1,7 +1,6 @@
 # LED Strip Controller — Design Spec
 
 Board: **LED Strip Controller** — `FEHA-LSC-001-01` Rev A (Controller); enclosure `FEHA-LSC-001-02` Rev A
-Status: concept.
 
 Scope of this document: the product's design intent and every settled decision. §0 is the
 session pickup point; §11 is the decision log; Appendix A records which datasheets back which
