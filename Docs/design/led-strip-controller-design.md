@@ -357,6 +357,8 @@ Vendor PDFs in `../datasheets/` are ground truth.
 | SS34 | `MDD-SS34.pdf` | |
 | B5819W SL | `CJ-B5819W-SL.pdf` | 40 V |
 | 0466002.NRHF | `Littelfuse-0466.pdf` | Not fitted (DEC-12); the part for a supply outside CON-7 |
-| CL21B105KBFNNNE | `Samsung-CL21B105KBFNNNE.pdf` | |
+| CL21B105KBFNNNE, CL31A106KBHNNNE, CL31A226KAHNNNE | `Samsung-CL21B105KBFNNNE.pdf` | Samsung MLCC general catalogue (2014): series ratings and part-number key; no part-specific DC-bias curves |
+| CL10A106MA8NRNC | `Samsung-CL10A106MA8NRNC.pdf` | Part specification sheet (2024) |
+| KT-0805Y | `KENTO-KT-0805Y.pdf` | Approval spec A.0; V_F 1.8–2.4 V at 20 mA, I_F 25 mA max |
 | FXL0420-100-M | `cjiang-FXL0420-100-M.pdf` | Series catalogue |
 | HDGC4001SMD-S-2P | `HDGC-HDGC4001SMD-S-2P.pdf` | |
