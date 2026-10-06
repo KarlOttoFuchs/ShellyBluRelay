@@ -28,12 +28,13 @@ Last updated: 2026-10-06
   header above CN2, adapter lying flat over the +Y edge (DEC-32); vias, netclasses, origin
   (DEC-33). Placement proven at courtyard level by
   `Hardware/FEHA-LSC-001-01-Controller-Rev-A/scripts/fit_placement.py` (all 40 parts, no overlaps).
+- **Layout steps 1–2 done 2026-10-06:** placement applied (`scripts/fit_placement.py`; C5
+  moved 0.2 mm to clear L1's pad); board set up by `scripts/setup_board.py`: 4 layers, outline
+  with 0.5 mm notch fillets, origin at the centre, CON-3 part keep-outs on F.Cu, antenna
+  keep-out on L1–L4, GND pours L1–L4; board rules (DEC-34) and netclasses per DEC-33 in
+  `.kicad_pro`. DRC leaves only routing-stage items: 54 unconnected, 1 starved thermal
+  (U1 pin 2), 20 silkscreen to tidy, plus the PCM_JLCPCB library warnings (kicad-cli only).
 - **Next:** layout gate, in this order:
-  1. Apply the placement: run `scripts/fit_placement.py` against the real board (KiCad closed;
-     check the checksum before and after), or place by hand from its coordinate table.
-  2. Board setup: 4-layer stack-up, 50 × 25 outline with the notch (0.5 mm inner radii), board
-     origin at the centre, 1.0 mm top-side edge keep-outs (CON-3), antenna keep-out on all
-     4 layers, GND on L1–L4, netclasses Default + PWR_1A (DEC-33). DRC.
   3. Karl routes; check against §7 rules 1–9 and register A-4 (USB pair as a pair, clear of
      the antenna).
   4. Enclosure: update `enclosure_rev_b.py` to the groove (DEC-29), 25 mm board width and the
@@ -384,6 +385,7 @@ capacitors) are picked from basic/preferred parts.
 | DEC-31 | 2026-10-06 | Antenna: board notch 15.2 × 6.6 mm in the +Y edge, centred on the module; keep-out on all 4 layers | Espressif: if the antenna cannot sit outside the board, cut the board away below and on both sides of it. Footprint antenna area is 5.4 mm deep; with the 1.3 mm inset (DEC-29) a 6.6 mm notch reaches the antenna boundary and stays 0.4 mm clear of the module's top pad row; 15.2 mm = module + 1 mm each side. Espressif also asks ≈ 15 mm clear of metal around the antenna in the housing: PETG tube, do not mount against metal |
 | DEC-32 | 2026-10-06 | Debug header CN3 at the OUT end, +Y edge, above CN2; pin 1 (V) towards the OUT end. The bench USB-C adapter (10 × 13 mm, pin row 2 mm from its edge) goes on straight pins and lies flat, its socket overhanging the +Y edge; VBUS diode D4 next to the header | Bench-only (DEC-14), board out of the tube. Flat on the edge puts only ≈ 5 mm of the adapter over the board and keeps the space beside the module for the module's own parts. D−/D+ run ≈ 15 mm, fine for full speed (A-4). Rejected: header on the module's USB side with the adapter upright on a right-angle header (Karl prefers the edge overhang), header on the IN side of the module (USB pair round the module) |
 | DEC-33 | 2026-10-06 | Vias 0.45/0.3 mm everywhere (two side by side where a 1 A net changes layer). Netclasses: Default (0.25 mm track) and PWR_1A (1.0 mm: `/+24V`, `/VIN_N`, `/LED_N`). Board origin at the board centre | Via size proven on GeyserSense (FEHA-GTS-001). The tube and both caps are symmetric about their mid-plane, so centre coordinates map straight onto the enclosure and survive length changes |
+| DEC-34 | 2026-10-06 | Board rules: copper-to-edge clearance 0.3 mm; minimum via 0.4 mm, minimum annular ring 0.075 mm. Stack-up nominal 1.6 mm (KiCad default 4-layer), built to JLCPCB's standard 4-layer stack-up | The 0.5 mm default failed on settled geometry: the U2 GND pad row sits 0.4 mm from the notch (DEC-31), CN1/CN2 pads 0.3 mm from the short edges. JLCPCB's routed-edge minimum is 0.2 mm. The via minimums are GeyserSense's (FEHA-GTS-001), where DEC-33's 0.45/0.3 via was proven; the 0.5 / 0.1 defaults reject it. No impedance-controlled nets (§7), so the dielectric split does not matter. Rejected: per-item DRC exclusions, a custom rule for U2/CN1/CN2 only |
 
 **Baseline rule:** until the first schematic gate closes, this table is a *baseline* — rows are
 edited in place, not superseded. After that gate, a changed decision gets
