@@ -159,8 +159,10 @@ design for 100 % on with no time limit. Estimates, closed tube in 35 °C ambient
 | Output SI2356DS, full on (typ / worst) | 0.015 / 0.02 W | 0.06 / 0.085 W |
 | Output SI2356DS, ~90 % PWM, 100 Ω gate (worst) | ≈ 0.035 W | ≈ 0.11 W |
 | Reverse-protection HL2310A (≤ 105 mΩ at 10 V gate; × 1.2 warm) | ≤ 0.03 W | ≤ 0.13 W |
+| IN/OUT connector contacts (4 × ≤ 20 mΩ) + copper | ≤ 0.03 W | ≤ 0.11 W |
 | ESP32-C3 + buck | ≈ 0.35 W | ≈ 0.35 W |
-| Air inside the tube | ≈ 43 °C | ≈ 47 °C |
+| Total in the tube (worst) | ≈ 0.45 W | ≈ 0.72 W |
+| Air inside the tube | ≈ 44 °C | ≈ 49 °C |
 | Output MOSFET junction (Tj max 150 °C) | ≈ 50 °C | ≈ 65 °C worst |
 
 Worst case = datasheet maximum on-resistance at a 2.5 V gate (70 mΩ) × 1.2 for a warm junction;
@@ -168,6 +170,24 @@ switching loss from ≈ 55–60 ns per edge (100 Ω gate + ≈ 17 Ω GPIO driver
 at a ≈ 1.6 V plateau, datasheet p.3), ≈ 80 ns with a hot junction. SI2356DS: RthJA 175 °C/W max
 steady state on 1" × 1" FR4, junction-to-foot (drain) 75 °C/W max. SOT-23 has no exposed pad,
 so the drain copper is the heatsink. The real limit is the PETG tube and the 85 °C connectors.
+Connector contact resistance is the HDGC4001 datasheet maximum (20 mΩ per contact, four contacts
+in the load path); copper allows ≈ 10–30 mΩ of 1 oz path.
+
+Copper pour sets junction temperature, not tube temperature: all the heat leaves through the
+tube whatever the copper, so the wall follows total watts. At 3 m worst case the junctions sit at
+≈ 80 °C on minimal pads, ≈ 71 °C on the datasheet's 1″² copper and ≈ 64 °C with the rule 1/3
+pours stitched to the GND plane (≈ 120 °C/W, estimate).
+
+**Current ceiling (this BOM, closed tube, 35 °C ambient):** solved with R_DS(on) tracking
+junction temperature (≈ +0.65 %/°C, both datasheets) and the tube air rising with load. The
+HL2310A reverse MOSFET limits first. With the rule 1/3 pours, worst-case parts reach 125 °C
+junction at ≈ 1.7 A and 150 °C (abs max) at ≈ 1.85 A, with the tube air at ≈ 65–71 °C, so the
+tube wall and the MOSFETs run out together. On minimal copper: ≈ 1.45 A / 1.6 A. Beyond
+≈ 2.2 A there is no stable operating point (thermal runaway). **Practical maximum: 1.5 A
+continuous** (4.5 m at 8 W/m; junctions ≈ 100 °C, tube ≈ 60 °C). The datasheet I_D ratings
+(3.2 A / 3 A at 25 °C on 1″² FR4) do not apply inside the tube. The 3 m / 1.0 A rating (CON-1)
+has ≈ 1.6× headroom. Any load above 1.25 A also needs a supply outside CON-7, which reopens
+DEC-12. The soak test's V_DS at full on (§10) calibrates these estimates.
 
 No impedance-controlled nets: USB is full-speed over a few centimetres and the module carries its
 own antenna (L-SI-2).
