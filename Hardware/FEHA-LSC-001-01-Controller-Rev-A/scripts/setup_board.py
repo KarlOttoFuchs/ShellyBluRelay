@@ -2,12 +2,14 @@
 
 Run on the placed board from fit_placement.py, with KiCad closed:
     /Applications/KiCad/KiCad.app/Contents/Frameworks/Python.framework/Versions/Current/bin/python3 \
-        scripts/setup_board.py SRC.kicad_pcb DST.kicad_pcb
+        scripts/setup_board.py SRC.kicad_pcb DST.kicad_pcb [W]
+W is the board width in mm (default 30, DEC-35). Re-runnable: it replaces the outline, the
+rule areas and its own GND pours (by zone name); footprints, tracks and other pours stay.
 Saving also rewrites .kicad_pro/.kicad_prl beside DST: use a scratch DST and copy only the
 .kicad_pcb into the project. Board rules and netclasses live in .kicad_pro and are set there.
 
-- 4 copper layers, KiCad default 1.6 mm stack-up (DEC-30)
-- outline redrawn: 50 x 25 with the 15.2 x 6.6 antenna notch, 0.5 mm radii in the notch's inner
+- 4 copper layers, KiCad default 1.6 mm stack-up (DEC-30, DEC-34)
+- outline redrawn: 50 x W with the 15.2 x 6.6 antenna notch, 0.5 mm radii in the notch's inner
   corners (1.0 mm router bit)
 - aux (drill/place) and grid origin at the board centre (DEC-33)
 - rule areas: 1.0 mm top-side part keep-out along both long edges (CON-3); antenna keep-out
@@ -22,7 +24,7 @@ import sys
 import pcbnew
 
 SRC, DST = sys.argv[1], sys.argv[2]
-L, W = 50.0, 25.0
+L, W = 50.0, float(sys.argv[3]) if len(sys.argv) > 3 else 30.0
 NCX, NOTCH_W, NOTCH_D, R = 25.0, 15.2, 6.6, 0.5
 EDGE_KO = 1.0
 mm = pcbnew.FromMM
@@ -43,6 +45,12 @@ board.SetCopperLayerCount(4)
 for d in list(board.GetDrawings()):
     if d.GetLayer() in (pcbnew.Edge_Cuts, pcbnew.User_1):
         board.Remove(d)
+# remove only this script's own zones (by name); hand-drawn pours stay
+OWN = {"CON-3 edge -Y", "CON-3 edge +Y", "Antenna keep-out",
+       "GND F.Cu", "GND In1.Cu", "GND In2.Cu", "GND B.Cu"}
+for z in list(board.Zones()):
+    if z.GetZoneName() in OWN:
+        board.Remove(z)
 
 a, b, yb = NCX - NOTCH_W / 2, NCX + NOTCH_W / 2, W - NOTCH_D
 k = R * (1 - math.sqrt(0.5))
