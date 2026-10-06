@@ -27,6 +27,17 @@ GND. C1 (IO9 debounce), C6 (module 3V3) and C7 (bootstrap) moved to the same par
 the input capacitors.
 **Verify.** Layout gate: C9 placement against TI §11 rule 1. Bring-up: buck ripple check (spec §10).
 
+## CHG-02 — Debug header in standard USB pin order
+
+**Status:** Implemented · **Severity:** Major · **Origin:** schematic review 2026-10-02, FUNC-7
+([`schematic-2026-10-02-controller.md`](../../Docs/design/reviews/schematic-2026-10-02-controller.md))
+
+**Problem.** The debug header had D+ and D− in the reverse of the standard USB order, so the bench
+pigtail (5V, D−, D+, GND) would cross the data pair and the board would not enumerate.
+**Change.** Header pins 2 and 3 swapped: pin 2 is D−, pin 3 is D+ (spec §6).
+**Impact.** None outside this board; the header is DNP and bench-only.
+**Verify.** Bring-up: board enumerates as USB-Serial-JTAG through the pigtail and flashes (spec §10).
+
 
 ## Deferred / Not doing
 
