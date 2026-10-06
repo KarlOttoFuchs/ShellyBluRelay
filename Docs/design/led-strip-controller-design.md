@@ -48,13 +48,15 @@ Last updated: 2026-10-06
   the GeyserSense name block under it (`${TITLE}` / Designed by `${COMMENT1}` / PN `${COMMENT2}`,
   1 mm bold, bottom at y = 129.2), same 11 mm logo-to-text offset as FEHA-GTS-001.
   24 V routing reviewed 2026-10-06 against §7 rules 1–7 (DEC-39): via pairs, MOSFET
-  source vias and the Q2 drain pour added; +24V to the buck runs on F.Cu down the left side
-  (not L4 as rule 4 says), well clear of the module.
+  source vias and the Q2 drain pour added. Teardrops on all pads.
+  **Layout gate review 2026-10-06**
+  ([`reviews/layout-2026-10-06-controller.md`](reviews/layout-2026-10-06-controller.md),
+  checklist v1.3): dispositions in DEC-40 (VIN_N via pairs, courtyards added and the check
+  re-enabled, §7 rules 3/4/9 updated to the board as built, EPAD finding withdrawn).
 - **Next:** layout gate, in this order:
-  3. Karl routes; check against §7 rules 1–9 and register A-4 (USB pair as a pair, clear of
-     the antenna). CN1: tie each pin's two pads together via 2 × 0.45/0.3 vias per pad in the
-     gap under the housing (not in the pads), +24V on L4; VIN_N is its own net to Q1.
-     Open DRC items: U2 silk clipped by the antenna notch (3 warnings).
+  3. Close the layout gate: all findings dispositioned (L-7 courtyard overlaps and A-L1 U2
+     silk are DRC exclusions); only the A-L2 loop-size note remains. DRC: 0 unconnected, 0
+     unexcluded errors.
   4. Enclosure: update `enclosure_rev_b.py` to the groove (DEC-29), 30 mm board width (DEC-35) and the
      new button/LED/connector positions from the final placement; regenerate the STLs. Then
      rebuild the enclosure-fit page (claude.ai artifact "LSC Tube Fit",
@@ -236,12 +238,13 @@ own antenna (L-SI-2).
    keep the pour compact rather than sprawling, and keep it away from the module antenna area,
    the buck feedback node and the button/LED lines.
 2. **Output MOSFET source (pin 2):** straight into the GND plane through 2–3 vias at the pad.
-3. **Reverse-protection MOSFET:** drain is the input − net — run it as a wide pour from the IN
-   connector to pin 3 (carries the full return current and spreads heat); source into the GND
-   plane. Zener and 100 kΩ next to the gate.
+3. **Reverse-protection MOSFET:** drain is the input − net — a 1.0 mm track from the IN
+   connector to pin 3 (carries the full return current), with a via pair at each layer change
+   (DEC-40); source into the GND plane. Zener and 100 kΩ next to the gate.
 4. **Ground planes (DEC-30):** L2 and L3 are solid GND under everything except the antenna
-   notch; L1 and L4 carry routing plus GND pours, stitched to the planes. +24 V reaches the buck
-   and CN2 (LED+) on L4, with both planes between it and the module. The planes are the main
+   notch; L1 and L4 carry routing plus GND pours, stitched to the planes. +24 V crosses under the module on L4, with both planes between it
+   and the module; at the IN end (down the left side to the buck) and the OUT end (CN2, D1,
+   C10) it runs on L1, away from the module (DEC-40). The planes are the main
    heat spreader. "Bottom layer" in rules 1–3 means L4.
 5. **Spread the heat sources:** keep the two MOSFETs, the buck and the ESP32 module apart rather
    than clustered; keep each heat source ≥ 3 mm from the long board edges, where the PETG
@@ -274,8 +277,9 @@ own antenna (L-SI-2).
    The strip and its cable are outside the board's control; this keeps the board's own
    contribution small.
 8. **Input:** TVS close to the IN connector, after the reverse-protection MOSFET.
-9. **Test access:** a bare copper test pad on the output drain pour for a thermocouple, and
-   test points on drain and GND for measuring V_DS at full on during the soak test.
+9. **Test access:** test points on drain (TP6) and GND for measuring V_DS at full on during the
+   soak test; the thermocouple is taped to the output MOSFET and its drain copper, no bare pad
+   (DEC-40).
 
 ## 8. Firmware
 
@@ -331,8 +335,8 @@ capacitors) are picked from basic/preferred parts.
 ## 10. Verification and bring-up plan
 
 - **Test-point plan:** +24V, +3V3 (3.22–3.42 V), module EN, output drain (V_DS at full on) and
-  two GND test points, all in the schematic; a bare copper pad on the output drain pour for a
-  thermocouple (§7 rule 9).
+  two GND test points, all in the schematic; the soak-test thermocouple is taped to the output
+  MOSFET and its drain copper (§7 rule 9, DEC-40).
 - **USB rule** (DEC-24): flash and debug over the USB header with the 24 V supply disconnected;
   the board runs from USB alone. Disconnect USB before connecting 24 V.
 - **Functional test** (each board, by hand on the bench): flash over the USB header (24 V
@@ -409,6 +413,7 @@ capacitors) are picked from basic/preferred parts.
 | DEC-37 | 2026-10-06 | Narrower widths: PWR_3V3 0.5 mm (was 0.6); pre-defined tracks 0.25 / 0.3 / 0.5 / 1.0 mm (0.4 → 0.3, 0.6 → 0.5). Default and PWR_1A unchanged. The two +3V3 segments already routed at 0.6 set to 0.5 | Karl: 0.6 and 0.4 were just a bit too wide. 0.5 mm on 1 oz still carries the few-hundred-mA radio peaks with margin. DRC unchanged (no new violations) |
 | DEC-38 | 2026-10-06 | New netclass GND 0.5 mm (`GND`), vias 0.45/0.3, priority 2 | Karl: 0.5 mm is a good size for the short stubs from cap pads to GND vias. Replaces DEC-36's "GND stays in Default"; planes still carry GND. DRC unchanged |
 | DEC-39 | 2026-10-06 | 24 V routing review fixes: second 0.45/0.3 via at both +24V layer changes (CN1 end 113.45/114.75, CN2 end 134.35/115.45); Q1 source 2 GND vias (rule 3), Q2 source second GND via (rule 2); Q2 drain LED_N pour 5.5 × 6 mm on F.Cu and B.Cu (priority 2, solid), 6 stitching vias | DEC-33 asks for two vias per 1 A layer change; Q1's source had no via (3.9 mm to the nearest) and carries the whole return current. Rule 1 asks ≈ 1 cm²: the corner between the module, D1 and CN2 holds ≈ 32 mm² per side (≈ 0.65 cm² with both, plus the pads); growing it means moving toward the antenna (rule 1 says keep away) or into the USB pair. Ample at 1.5 m; the 3 m soak test (§10) decides whether more is needed. DRC unchanged |
+| DEC-40 | 2026-10-06 | Layout gate review dispositions (`reviews/layout-2026-10-06-controller.md`): second 0.45/0.3 via at both VIN_N layer changes (110.97/104.00, y 118.81); courtyards added to the five project-library footprints without one (Q2, U1, CN1, CN2, L1; body/pads + 0.25 mm) and DRC `missing_courtyard` back to error, logo exempt; +24V on L1 at the IN and OUT ends, L4 only under the module (§7 rule 4 as built); VIN_N as a 1.0 mm track, not a pour (rule 3); thermocouple taped to Q2, no bare pad (rule 9); module EPAD left without vias | DEC-33 asks two vias per 1 A layer change; VIN_N carries the whole return current. Courtyard check was disabled, so five parts were never overlap-checked. The L1 +24V runs stay away from the module; the planes shield the only stretch near it. A 1.0 mm track meets rule 6. Karl: taping is enough for the soak test; EPAD without vias works on GeyserSense and other boards (finding L-2 withdrawn). DRC after the change: 0 unconnected, 0 parity; 4 courtyard-margin overlaps (L-7: Q2/CN2, U1/L1, C5/L1, CN1/L1) accepted by Karl as DRC exclusions: no pad or body collision, same net on three pairs; moving parts would loosen the buck loop and the output corner |
 
 **Baseline rule:** until the first schematic gate closes, this table is a *baseline* — rows are
 edited in place, not superseded. After that gate, a changed decision gets

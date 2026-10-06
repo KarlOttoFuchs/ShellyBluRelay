@@ -46,3 +46,9 @@ deferrals:
   - id: ss34-40v-freewheel
     date: 2026-10-02
     ref: DEC-22   # PART-1 / PROT-5
+  - id: module-epad-no-vias
+    date: 2026-10-06
+    ref: reviews/layout-2026-10-06-controller.md L-2   # withdrawn by Karl; L-THRM-1 (DEC-40)
+  - id: courtyard-margin-overlaps
+    date: 2026-10-06
+    ref: reviews/layout-2026-10-06-controller.md L-7   # Q2/CN2, U1/L1, C5/L1, CN1/L1 DRC exclusions (DEC-40)
