@@ -297,7 +297,9 @@ capacitors) are picked from basic/preferred parts.
 - **Bring-up order** (each step passes before the next):
   1. Unpowered: no short +24V–GND or +3V3–GND.
   2. USB pigtail only (24 V disconnected, DEC-24): +3V3 in range, EN rises ≈ 10 ms after +3V3,
-     board enumerates as USB-Serial-JTAG; flash.
+     board enumerates as USB-Serial-JTAG; flash. Start SoftAP (Wi-Fi TX) on USB power and
+     confirm +3V3 stays above 3.0 V; if the buck fails to start or resets, use a powered hub
+     (buck VIN ≈ 4.1–4.3 V after the Schottky against a 4.0 V maximum start threshold).
   3. USB removed; 24 V from a bench supply limited to ≈ 100 mA, no strip: input current
      settles at ≈ 15–30 mA, +24V and +3V3 in range; buck ripple and switch node on the scope.
   4. Strip connected, 24 V from the PS002A: functional test above (reversed input on one board

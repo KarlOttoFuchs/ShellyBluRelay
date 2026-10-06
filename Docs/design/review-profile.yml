@@ -37,3 +37,12 @@ deferrals:
   - id: PART-5-status-led-current
     date: 2026-10-06
     ref: reviews/schematic-2026-10-02-controller.md PART-5   # status LED drive settled (DEC-28)
+  - id: no-esd-protection
+    date: 2026-10-02
+    ref: DEC-19   # PROT-1
+  - id: no-input-fuse
+    date: 2026-10-02
+    ref: DEC-12   # PROT-3; supply requirement CON-7
+  - id: ss34-40v-freewheel
+    date: 2026-10-02
+    ref: DEC-22   # PART-1 / PROT-5
