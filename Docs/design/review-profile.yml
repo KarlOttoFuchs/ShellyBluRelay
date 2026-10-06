@@ -36,4 +36,4 @@ deferrals:
     ref: DEC-11   # hot-plug waived; no damping network, no hot-plug test
   - id: PART-5-status-led-current
     date: 2026-10-06
-    ref: reviews/schematic-2026-10-02-controller.md PART-5   # 470 ohm white LED accepted
+    ref: reviews/schematic-2026-10-02-controller.md PART-5   # status LED drive settled (DEC-28)

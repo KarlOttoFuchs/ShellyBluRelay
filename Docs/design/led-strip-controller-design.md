@@ -264,14 +264,15 @@ capacitors) are picked from basic/preferred parts.
 | Buck feedback RFBT / RFBB | 51 kΩ / 22 kΩ 1 % 0402 | C25794 / C25768 |
 | TVS | SMBJ26A | C19077580 |
 | USB Schottky | B5819W SL | C8598 |
-| Status LED / series resistor | Hubei KENTO KT-0805W, white, 0805 / 470 Ω 0402 (≈ 0.5–1.5 mA; visible at 1 kΩ on `FEHA-RM-001` Rev A) | C34499 / C25117 |
+| Status LED / series resistor | Hubei KENTO KT-0805Y, yellow ≈ 590 nm, 0805 / 470 Ω 0402 (≈ 2–3 mA) (DEC-28) | C2296 / C25117 |
 | Button | XUNPU TS-1088-AR02016, 4 × 3 mm, 2 mm tall | C720477 |
 | IN and OUT connectors (×2) | HDGC4001SMD-S-2P push-in, 18–24 AWG | C5197184 |
 
 ## 10. Verification and bring-up plan
 
-- **Test-point plan:** bare copper pad on the output drain pour for a thermocouple; test points
-  on the output drain and GND for V_DS at full on. Further rail test points: TBD with the schematic.
+- **Test-point plan:** +24V, +3V3 (3.22–3.42 V), module EN, output drain (V_DS at full on) and
+  two GND test points, all in the schematic; a bare copper pad on the output drain pour for a
+  thermocouple (§7 rule 9).
 - **USB rule** (DEC-24): flash and debug over the USB header with the 24 V supply disconnected;
   the board runs from USB alone. Disconnect USB before connecting 24 V.
 - **Functional test** (each board, by hand on the bench): flash over the USB header (24 V
@@ -293,7 +294,15 @@ capacitors) are picked from basic/preferred parts.
   10 s. Record the supply's behaviour (hiccup or constant current, and the current). Pass: the
   supply limits below 2 A (CON-7); the board keeps running from the buck or recovers when the
   short is removed; the output MOSFET survives.
-- **Bring-up order:** TBD with the schematic.
+- **Bring-up order** (each step passes before the next):
+  1. Unpowered: no short +24V–GND or +3V3–GND.
+  2. USB pigtail only (24 V disconnected, DEC-24): +3V3 in range, EN rises ≈ 10 ms after +3V3,
+     board enumerates as USB-Serial-JTAG; flash.
+  3. USB removed; 24 V from a bench supply limited to ≈ 100 mA, no strip: input current
+     settles at ≈ 15–30 mA, +24V and +3V3 in range; buck ripple and switch node on the scope.
+  4. Strip connected, 24 V from the PS002A: functional test above (reversed input on one board
+     per batch).
+  5. 3 m board only: soak test, dimming low end, short circuit.
 
 ## 11. Decision log
 
@@ -323,6 +332,7 @@ capacitors) are picked from basic/preferred parts.
 | DEC-24 | 2026-10-02 | USB header and 24 V supply never connected together (procedural, no circuit change) | USB GND bypasses the reverse MOSFET: with an earthed supply output, a reversed lead and an earthed host, host VBUS is shorted through the B5819W. The board runs from USB alone for flashing |
 | DEC-25 | 2026-10-02 | Firmware framework: ESP-IDF v5.5 | Karl's choice; ESPHome is not used for this product |
 | DEC-26 | 2026-10-02 | Fades through a perceptual lookup table with a measured `min_code`, stepped in software, same table both directions | The MOSFET cannot resolve the lowest 12.5 ns codes; LEDC hardware fade is linear in duty |
+| DEC-28 | 2026-10-06 | Status LED is yellow (KT-0805Y, C2296), off in normal operation; it signals setup and fault states by blink pattern | The LED faces down into the room through the enclosure window: white carries no meaning and reads as strip light leakage; yellow reads as "attention" for both setup and fault. Its ≈ 2 V forward voltage lets the 470 Ω resistor set the current (≈ 2–3 mA), where the white part's 2.6–3.2 V left brightness to the LED bin. Rejected: addressable RGB (WS2812B-2020-V6 C52917434, XL-1615RGBC C5349954; JLCPCB has none without a setup fee), red/green pair (second GPIO, LED and window), red alone (alarming for setup states) |
 | DEC-19 | 2026-10-02 | No ESD protection on the terminals or USB header | Terminals wired unpowered; USB bench-only; board enclosed |
 | DEC-20 | 2026-10-02 | Test strategy: functional, JLCPCB PCBA, small batches | Low volume; no fixture or ATE |
 | DEC-27 | 2026-10-02 | Module: ESP32-C3-MINI-1-H4X (C41349510) | Same module as GeyserSense (FEHA-GTS-001). Chip revision v1.1, −40 to 105 °C, cheaper than the MINI-1-N4 ($2.95 against $3.03), which Espressif lists as NRND (MINI-1 datasheet v2.2). Rejected: ESP8684-MINI-1 / ESP32-C2 (low stock, firmware port, tighter RAM for BLE + GATT + SoftAP), bare ESP32-C3 chip (crystal, flash, antenna matching and RF layout for no saving at small batches) |
