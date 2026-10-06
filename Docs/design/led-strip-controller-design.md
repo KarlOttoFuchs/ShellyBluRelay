@@ -39,12 +39,16 @@ Last updated: 2026-10-06
   (PWR_3V3 and GND 0.5 mm; tracks 0.25/0.3/0.5/1.0).
   Buck pours on F.Cu (priority 1, solid): `SW F.Cu` hugging U1.6/C7.2/L1.2 (TI §11.1.1: SW node short, just wide
   enough); `+24V buck in F.Cu` on U1 VIN pins and C3/C8/C9 pin 1, kept off the IC interior so
-  GND reaches U1 pin 2. Routing started (first +3V3 segment).
+  GND reaches U1 pin 2. Routing done by Karl (DRC 0 unconnected).
+  Polarity silkscreen at both connectors: F.SilkS `+`/`-` 1.4 mm bold beside each pin at the
+  board edge (1.4 is the largest that clears D2's silk) plus `IN` (CN1) / `OUT` (CN2) 1.2 mm;
+  B.SilkS `+`/`-` 2.5 mm behind the pins plus `IN`/`OUT` 2.5 mm. CN1 has + on the top pin
+  (y = 113), CN2 has + on the bottom pin (y = 117).
 - **Next:** layout gate, in this order:
   3. Karl routes; check against §7 rules 1–9 and register A-4 (USB pair as a pair, clear of
      the antenna). CN1: tie each pin's two pads together via 2 × 0.45/0.3 vias per pad in the
      gap under the housing (not in the pads), +24V on L4; VIN_N is its own net to Q1.
-     Open DRC items: silkscreen tidy.
+     Open DRC items: U2 silk clipped by the antenna notch (3 warnings).
   4. Enclosure: update `enclosure_rev_b.py` to the groove (DEC-29), 30 mm board width (DEC-35) and the
      new button/LED/connector positions from the final placement; regenerate the STLs. Then
      rebuild the enclosure-fit page (claude.ai artifact "LSC Tube Fit",
