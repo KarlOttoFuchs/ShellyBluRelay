@@ -23,11 +23,25 @@ Last updated: 2026-10-06
   the connector loss and the in-tube current ceiling (1.5 A practical). From here the decision
   log is superseded, not edited (§11 baseline rule).
 - **Blocked on:** —
-- **Enclosure retention (DEC-29, 2026-10-06):** full-length wall groove replaces rails + hold-down
-  ribs; CON-3 is now a 1.0 mm full-length top-side edge keep-out. `enclosure_rev_b.py` not yet
-  updated: do it once the PCB outline is fixed.
-- **Next:** layout gate. Carried into it: §7 rules 1–9, register A-1 (R_0402 footprints lack the
-  SMD attribute; check the CPL) and A-4 (USB pair short, clear of the antenna end).
+- **Layout decisions 2026-10-06:** wall groove (DEC-29); board 50 × 25 mm, 4 layers, stack-up
+  L1 routing + GND / L2 GND / L3 GND / L4 routing + GND (DEC-30); antenna notch (DEC-31); debug
+  header above CN2, adapter lying flat over the +Y edge (DEC-32); vias, netclasses, origin
+  (DEC-33). Placement proven at courtyard level by
+  `Hardware/FEHA-LSC-001-01-Controller-Rev-A/scripts/fit_placement.py` (all 40 parts, no overlaps).
+- **Next:** layout gate, in this order:
+  1. Apply the placement: run `scripts/fit_placement.py` against the real board (KiCad closed;
+     check the checksum before and after), or place by hand from its coordinate table.
+  2. Board setup: 4-layer stack-up, 50 × 25 outline with the notch (0.5 mm inner radii), board
+     origin at the centre, 1.0 mm top-side edge keep-outs (CON-3), antenna keep-out on all
+     4 layers, GND on L1–L4, netclasses Default + PWR_1A (DEC-33). DRC.
+  3. Karl routes; check against §7 rules 1–9 and register A-4 (USB pair as a pair, clear of
+     the antenna).
+  4. Enclosure: update `enclosure_rev_b.py` to the groove (DEC-29), 25 mm board width and the
+     new button/LED/connector positions from the final placement; regenerate the STLs. Then
+     rebuild the enclosure-fit page (claude.ai artifact "LSC Tube Fit",
+     https://claude.ai/artifact/8Cz9GvjaSQ5Euj6Yx1rkBk) and `Enclosure/.../enclosure-concept.html`
+     to show the final state only: groove section, final placement, PCB rules. No drafts (the
+     page still shows the superseded rails/ribs and earlier proposals).
 
 ## 1. What this board is
 
@@ -36,7 +50,7 @@ Shelly BLU sensors over BLE, in an inline printed tube between the power supply 
 
 | | |
 |---|---|
-| MCU | ESP32-C3-MINI-1-H4X module, −40 to 105 °C (DEC-27; antenna at the board's +Y edge, module set 1.3 mm in from it, DEC-29) |
+| MCU | ESP32-C3-MINI-1-H4X module, −40 to 105 °C (DEC-27; antenna over a notch in the board's +Y edge, module set 1.3 mm in from it, DEC-29, DEC-31) |
 | Power source | Futurelight PS002A, 24 V DC 30 W (1.25 A) surge-protected LED supply, IP20, also feeding the strip (DEC-21); USB 5 V via the debug header for bring-up |
 | Comms | BLE (Shelly BLU / BTHome triggers, GATT setup page); SoftAP fallback for setup only |
 | Operating temperature | 0 to 35 °C ambient around the tube (DEC-18); the §7 thermal budget is worked at the 35 °C top of the range |
@@ -52,7 +66,7 @@ Shelly BLU sensors over BLE, in an inline printed tube between the power supply 
 | ID | Constraint | Source |
 |---|---|---|
 | CON-1 | Load 24 V COB strip, 8 W/m: 1.5 m (0.5 A) normal use, rated to 3 m (1.0 A) continuous at 100 % on with no time limit | DEC-01 |
-| CON-2 | Board outline 66 × 20 mm (placeholder); no part taller than the 4.5 mm connectors | Enclosure model, DEC-16 |
+| CON-2 | Board outline 50 × 25 mm, 4 layers, with a 15.2 × 6.6 mm antenna notch in the +Y edge; no part taller than the 4.5 mm connectors | Enclosure model, DEC-16, DEC-30, DEC-31 |
 | CON-3 | Top side clear of parts within 1.0 mm of both long edges, full board length (the board edges run in a wall groove that overlaps them by 0.7 mm; the board slides in, so the whole edge passes the groove lip). Bottom side: no parts | Enclosure model, DEC-16, DEC-29 |
 | CON-4 | Tube inner wall < 65 °C at 3 m / 1 A after soak (PETG softens ~80 °C, connectors rated 85 °C) | DEC-01, §10 |
 | CON-5 | Output stays off through power-up, ROM bootloader and flashing | DEC-03 |
@@ -206,8 +220,10 @@ own antenna (L-SI-2).
 3. **Reverse-protection MOSFET:** drain is the input − net — run it as a wide pour from the IN
    connector to pin 3 (carries the full return current and spreads heat); source into the GND
    plane. Zener and 100 kΩ next to the gate.
-4. **Ground plane:** solid bottom-layer GND plane under everything except the module antenna
-   keep-out; stitch top-layer GND pours to it. The plane is the main heat spreader.
+4. **Ground planes (DEC-30):** L2 and L3 are solid GND under everything except the antenna
+   notch; L1 and L4 carry routing plus GND pours, stitched to the planes. +24 V reaches the buck
+   and CN2 (LED+) on L4, with both planes between it and the module. The planes are the main
+   heat spreader. "Bottom layer" in rules 1–3 means L4.
 5. **Spread the heat sources:** keep the two MOSFETs, the buck and the ESP32 module apart rather
    than clustered; keep each heat source ≥ 3 mm from the long board edges, where the PETG
    rails and hold-down ribs touch the board.
@@ -364,6 +380,10 @@ capacitors) are picked from basic/preferred parts.
 | DEC-20 | 2026-10-02 | Test strategy: functional, JLCPCB PCBA, small batches | Low volume; no fixture or ATE |
 | DEC-27 | 2026-10-02 | Module: ESP32-C3-MINI-1-H4X (C41349510) | Same module as GeyserSense (FEHA-GTS-001). Chip revision v1.1, −40 to 105 °C, cheaper than the MINI-1-N4 ($2.95 against $3.03), which Espressif lists as NRND (MINI-1 datasheet v2.2). Rejected: ESP8684-MINI-1 / ESP32-C2 (low stock, firmware port, tighter RAM for BLE + GATT + SoftAP), bare ESP32-C3 chip (crystal, flash, antenna matching and RF layout for no saving at small batches) |
 | DEC-29 | 2026-10-06 | Board retention in the tube: a full-length groove in each side wall, formed by thickening the wall to 2.8 mm. Groove 1.9 mm tall (1.6 mm board + 0.3 mm), 1.0 mm deep (0.7 mm over the board edge + 0.3 mm side clearance), 1.8 mm of wall behind it. It replaces the support rails and the 10 mm hold-down ribs; the cap stop ribs stay. Tube printed standing on end. Sets CON-3 | The tube is one piece and the board slides in, so its whole edge passes the entry-end retention: the old CON-3 (clear only the last 10 mm) let the edge-flush module collide with a hold-down rib on insertion. Standing on end every layer has the same outline: no overhangs, no supports, and the slot height comes from XY accuracy. The outside width is unchanged (24.2 mm); the 1 mm per side lost inside is the PCB edge keep-out anyway. Holds the board along its full length instead of at the ends. Rejected: rails + 10 mm ribs as modelled (insertion collision), rails + full-length 1 mm rib (same slot, but a thin rib that warps and prints rough), groove cut into the 1.8 mm wall (≈ 0.8 mm left behind it), printing flat (the slot roof becomes a bridge that sags into a 0.3 mm clearance). Print a short test section first: FDM slots come out 0.1–0.2 mm tight. Consequence for the PCB: ESP32 module set 1.3 mm in from the +Y edge (clears the wall face above the groove by 0.3 mm) |
+| DEC-30 | 2026-10-06 | Board 50 × 25 mm, 4 layers (JLCPCB standard 1.6 mm). Stack-up: L1 routing + GND pour, L2 solid GND, L3 solid GND, L4 routing + GND pour. Supersedes the 66 × 20 mm placeholder in CON-2 | CN2's LED+ pin is +24 V, so 24 V must run the full board length. On a 20 mm board the module covers all but 0.85 mm of the width: on 2 layers 24 V could only pass under the module on the bottom layer, cutting the GND plane. With two inner GND planes, 24 V runs on L4 shielded from the module. Courtyard fit test of all 40 parts: 50 × 24 fails, 50 × 25 fits (64 % part area). JLCPCB prices 1–8 layer boards up to 50 × 50 mm at its lowest tier. Tube becomes 29.2 mm wide and ≈ 16 mm shorter (≈ +2 °C tube air at 3 m, estimate). Rejected: 58 × 20 mm 2-layer (fits, but cuts the plane under the module), 60 × 20 mm 4-layer (outside the 50 × 50 price tier), 50 × 20 mm (parts do not fit: 14 overlaps), 24 V on an inner layer (Karl: both inners solid GND) |
+| DEC-31 | 2026-10-06 | Antenna: board notch 15.2 × 6.6 mm in the +Y edge, centred on the module; keep-out on all 4 layers | Espressif: if the antenna cannot sit outside the board, cut the board away below and on both sides of it. Footprint antenna area is 5.4 mm deep; with the 1.3 mm inset (DEC-29) a 6.6 mm notch reaches the antenna boundary and stays 0.4 mm clear of the module's top pad row; 15.2 mm = module + 1 mm each side. Espressif also asks ≈ 15 mm clear of metal around the antenna in the housing: PETG tube, do not mount against metal |
+| DEC-32 | 2026-10-06 | Debug header CN3 at the OUT end, +Y edge, above CN2; pin 1 (V) towards the OUT end. The bench USB-C adapter (10 × 13 mm, pin row 2 mm from its edge) goes on straight pins and lies flat, its socket overhanging the +Y edge; VBUS diode D4 next to the header | Bench-only (DEC-14), board out of the tube. Flat on the edge puts only ≈ 5 mm of the adapter over the board and keeps the space beside the module for the module's own parts. D−/D+ run ≈ 15 mm, fine for full speed (A-4). Rejected: header on the module's USB side with the adapter upright on a right-angle header (Karl prefers the edge overhang), header on the IN side of the module (USB pair round the module) |
+| DEC-33 | 2026-10-06 | Vias 0.45/0.3 mm everywhere (two side by side where a 1 A net changes layer). Netclasses: Default (0.25 mm track) and PWR_1A (1.0 mm: `/+24V`, `/VIN_N`, `/LED_N`). Board origin at the board centre | Via size proven on GeyserSense (FEHA-GTS-001). The tube and both caps are symmetric about their mid-plane, so centre coordinates map straight onto the enclosure and survive length changes |
 
 **Baseline rule:** until the first schematic gate closes, this table is a *baseline* — rows are
 edited in place, not superseded. After that gate, a changed decision gets
