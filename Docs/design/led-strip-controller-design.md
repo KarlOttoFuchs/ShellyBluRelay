@@ -23,6 +23,9 @@ Last updated: 2026-10-06
   the connector loss and the in-tube current ceiling (1.5 A practical). From here the decision
   log is superseded, not edited (§11 baseline rule).
 - **Blocked on:** —
+- **Enclosure retention (DEC-29, 2026-10-06):** full-length wall groove replaces rails + hold-down
+  ribs; CON-3 is now a 1.0 mm full-length top-side edge keep-out. `enclosure_rev_b.py` not yet
+  updated: do it once the PCB outline is fixed.
 - **Next:** layout gate. Carried into it: §7 rules 1–9, register A-1 (R_0402 footprints lack the
   SMD attribute; check the CPL) and A-4 (USB pair short, clear of the antenna end).
 
@@ -33,7 +36,7 @@ Shelly BLU sensors over BLE, in an inline printed tube between the power supply 
 
 | | |
 |---|---|
-| MCU | ESP32-C3-MINI-1-H4X module, −40 to 105 °C (DEC-27; antenna flush with the board's +Y edge) |
+| MCU | ESP32-C3-MINI-1-H4X module, −40 to 105 °C (DEC-27; antenna at the board's +Y edge, module set 1.3 mm in from it, DEC-29) |
 | Power source | Futurelight PS002A, 24 V DC 30 W (1.25 A) surge-protected LED supply, IP20, also feeding the strip (DEC-21); USB 5 V via the debug header for bring-up |
 | Comms | BLE (Shelly BLU / BTHome triggers, GATT setup page); SoftAP fallback for setup only |
 | Operating temperature | 0 to 35 °C ambient around the tube (DEC-18); the §7 thermal budget is worked at the 35 °C top of the range |
@@ -50,7 +53,7 @@ Shelly BLU sensors over BLE, in an inline printed tube between the power supply 
 |---|---|---|
 | CON-1 | Load 24 V COB strip, 8 W/m: 1.5 m (0.5 A) normal use, rated to 3 m (1.0 A) continuous at 100 % on with no time limit | DEC-01 |
 | CON-2 | Board outline 66 × 20 mm (placeholder); no part taller than the 4.5 mm connectors | Enclosure model, DEC-16 |
-| CON-3 | Top side clear within 1.5 mm of both long edges over the last 10 mm at each end (hold-down ribs) | Enclosure model, DEC-16 |
+| CON-3 | Top side clear of parts within 1.0 mm of both long edges, full board length (the board edges run in a wall groove that overlaps them by 0.7 mm; the board slides in, so the whole edge passes the groove lip). Bottom side: no parts | Enclosure model, DEC-16, DEC-29 |
 | CON-4 | Tube inner wall < 65 °C at 3 m / 1 A after soak (PETG softens ~80 °C, connectors rated 85 °C) | DEC-01, §10 |
 | CON-5 | Output stays off through power-up, ROM bootloader and flashing | DEC-03 |
 | CON-6 | Whole board, including the strip, survives a reversed 24 V input | DEC-09 |
@@ -360,6 +363,7 @@ capacitors) are picked from basic/preferred parts.
 | DEC-19 | 2026-10-02 | No ESD protection on the terminals or USB header | Terminals wired unpowered; USB bench-only; board enclosed |
 | DEC-20 | 2026-10-02 | Test strategy: functional, JLCPCB PCBA, small batches | Low volume; no fixture or ATE |
 | DEC-27 | 2026-10-02 | Module: ESP32-C3-MINI-1-H4X (C41349510) | Same module as GeyserSense (FEHA-GTS-001). Chip revision v1.1, −40 to 105 °C, cheaper than the MINI-1-N4 ($2.95 against $3.03), which Espressif lists as NRND (MINI-1 datasheet v2.2). Rejected: ESP8684-MINI-1 / ESP32-C2 (low stock, firmware port, tighter RAM for BLE + GATT + SoftAP), bare ESP32-C3 chip (crystal, flash, antenna matching and RF layout for no saving at small batches) |
+| DEC-29 | 2026-10-06 | Board retention in the tube: a full-length groove in each side wall, formed by thickening the wall to 2.8 mm. Groove 1.9 mm tall (1.6 mm board + 0.3 mm), 1.0 mm deep (0.7 mm over the board edge + 0.3 mm side clearance), 1.8 mm of wall behind it. It replaces the support rails and the 10 mm hold-down ribs; the cap stop ribs stay. Tube printed standing on end. Sets CON-3 | The tube is one piece and the board slides in, so its whole edge passes the entry-end retention: the old CON-3 (clear only the last 10 mm) let the edge-flush module collide with a hold-down rib on insertion. Standing on end every layer has the same outline: no overhangs, no supports, and the slot height comes from XY accuracy. The outside width is unchanged (24.2 mm); the 1 mm per side lost inside is the PCB edge keep-out anyway. Holds the board along its full length instead of at the ends. Rejected: rails + 10 mm ribs as modelled (insertion collision), rails + full-length 1 mm rib (same slot, but a thin rib that warps and prints rough), groove cut into the 1.8 mm wall (≈ 0.8 mm left behind it), printing flat (the slot roof becomes a bridge that sags into a 0.3 mm clearance). Print a short test section first: FDM slots come out 0.1–0.2 mm tight. Consequence for the PCB: ESP32 module set 1.3 mm in from the +Y edge (clears the wall face above the groove by 0.3 mm) |
 
 **Baseline rule:** until the first schematic gate closes, this table is a *baseline* — rows are
 edited in place, not superseded. After that gate, a changed decision gets
