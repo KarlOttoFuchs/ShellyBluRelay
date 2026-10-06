@@ -54,7 +54,7 @@ Supersedes: the netlist-free items of `schematic-2026-10-02-rev-b-concept.md`, w
 | PROT-4 | N-A | No battery. |
 | PROT-5 | pass | SMBJ26A standoff 26 V > 24 V; clamp exceedance only under hot-plug (DEC-11 carried, DEC-22). |
 | PART-1 | pass | Q1 60 V, Q2 40 V, D1/D4 40 V at 24 V (60 %, DEC-22); caps above. |
-| PART-2 | pass | Q2 4.3 A vs 1 A; Q1 3 A vs 1 A (2 A short-circuit, DEC-12); CN1/CN2 9 A; D1 3 A; R3 ≈ 2 mW; L1 ≈ 35 mW at 350 mA. |
+| PART-2 | pass | Q2 4.3 A vs 1 A; Q1 3 A vs 1 A (2 A short-circuit, DEC-12); CN1/CN2 9 A; D1 3 A; R3 ≈ 2 mW; L1 ≈ 35 mW at 350 mA. Gate-close re-run: the datasheet I_D ratings are 25 °C figures; the in-tube ceiling worked in spec §7 (Q1 limits first, ≈ 1.85 A at Tj 150 °C, practical 1.5 A) still leaves ≈ 1.6× over the 1.0 A rating (CON-1). |
 | PART-3 | pass | 0–35 °C (DEC-18): every part rated ≥ −25…+85 °C (connector −25…+85, button −30…+80, LED −30…+85, module −40…+105). |
 | PART-4 | pass | All lines in stock 2026-10-02; module 1 317 pcs (thin, but enough for small batches). |
 | PART-5 | finding | Minor — status LED current, see Findings. Feedback divider 1 % (spec §2). |
@@ -89,5 +89,14 @@ Supersedes: the netlist-free items of `schematic-2026-10-02-rev-b-concept.md`, w
 ## Not assessable at this gate
 Placement of C6/C4 at module pin 3, the new VIN HF cap at U1, R5/R6 at FB, the §7 switching-loop corner, antenna keep-out, CN1/CN2 polarity silkscreen, A-1 and A-2 — layout gate.
 
+## Gate-close run — 2026-10-06
+Run: full · Checklist: v1.3 · Source: netlist → kicad-cli 10.0.4 XML (2026-10-06 11:50) from the saved `.kicad_sch`, byte-identical to commit f25ca93 (`git diff HEAD` empty). The KiCad project manager was open; nothing was written to the schematic.
+- **Connectivity, re-derived from the fresh netlist:** 40 components, 42 nets. Q1 G/S/D on `/G_REV`/GND/`/VIN_N`; Q2 on `/G_OUT`/GND/`/LED_N`; R9 `/G_OUT`–GND, R10 `/STRIP_PWM`–`/G_OUT`; D1 K `/+24V` A `/LED_N`; D2 K `/+24V`; D3 K GND; D4 K `/+24V` A `/VBUS`; D5 K `/G_REV`; C9 and C10 `/+24V`–GND; U1 EN and VIN on `/+24V`; CN1 `/+24V`, `/VIN_N`; CN2 `/+24V`, `/LED_N`; CN3 VBUS, D−, D+, GND (CHG-02); U2 3 = +3V3, 8 = EN, 16 = LED, 21 = PWM, 23 = BTN, 26 = D−, 27 = D+; TP1/TP7 GND, TP3 EN, TP4 +24V, TP5 +3V3, TP6 LED_N. Every coverage row above re-checks against this netlist unchanged.
+- **LIB-1/LIB-2:** 0 empty footprints; every footprint resolves by basename (KiCad install, PCM 3rd-party tree, project `.pretty`).
+- **DOC-1:** ERC 0 errors; 54 warnings, all `lib_symbol_issues`/`footprint_link_issues` for `PCM_JLCPCB*` (CLI library-path noise, Method note).
+- **BOM-1/BOM-3/LIB-4:** field audit 27 instances clean; CN3 empty sourcing fields intended (DNP, excluded from BOM). BOM export (23 lines) read: no junk, no missing line; one 100 nF line (C1/C6/C7/C9, C307331).
+- **PART-4:** module C41349510 1 171 in stock 2026-10-06.
+- **Design input since the review:** spec §7 now carries connector loss and the in-tube current ceiling (PART-2 note above). No schematic change.
+
 ## Gate status
-OPEN — 0 open findings (Blocker, Major or Minor); all 6 Advisory notes dispositioned 2026-10-06 (A-1 and A-4 layout notes carried to the layout gate). (PWR-3, FUNC-7, TEST-3, DOC-3 closed and PART-5 accepted, 2026-10-06.) Ready to close the schematic gate on Karl's word.
+**CLOSED (2026-10-06)** — Karl 2026-10-06: close. Full re-run on a fresh netlist, checklist v1.3: no open Blocker, Major or Minor; all 6 Advisory notes dispositioned (A-1 and A-4 carried to the layout gate, with the items under "Not assessable at this gate"). Profile `current_gate: layout`.

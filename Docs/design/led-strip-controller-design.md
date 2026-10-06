@@ -17,14 +17,15 @@ Last updated: 2026-10-06
   LED (DEC-28). Cost pass 2026-10-02: adjustable FPWM buck, no input fuse (supply requirement
   CON-7 instead), HL2310A reverse MOSFET, MINI-1-H4X module; 5 extended lines.
 - **Open questions:** the supply's overcurrent behaviour (not published; bench test in §10).
-- **Schematic:** captured and through the full schematic review
-  ([`reviews/schematic-2026-10-02-controller.md`](reviews/schematic-2026-10-02-controller.md)):
-  every finding closed or accepted, every advisory dispositioned; changes CHG-01 (buck input
-  100 nF), CHG-02 (debug header in standard USB order) and the yellow status LED (DEC-28). ERC
-  clean apart from kicad-cli library-path warnings. The gate is not yet closed.
+- **Schematic gate: CLOSED 2026-10-06**
+  ([`reviews/schematic-2026-10-02-controller.md`](reviews/schematic-2026-10-02-controller.md),
+  checklist v1.3, full re-run on a fresh netlist). Changes from the review: CHG-01 (buck input
+  100 nF), CHG-02 (debug header in standard USB order), yellow status LED (DEC-28). §7 carries
+  the connector loss and the in-tube current ceiling (1.5 A practical). From here the decision
+  log is superseded, not edited (§11 baseline rule).
 - **Blocked on:** —
-- **Next:** one further check Karl is bringing; if it changes nothing, close the schematic gate
-  (fresh full re-run, profile `current_gate: layout`, register CLOSED, push). Then layout.
+- **Next:** layout gate. Carried into it: §7 rules 1–9, register A-1 (R_0402 footprints lack the
+  SMD attribute; check the CPL) and A-4 (USB pair short, clear of the antenna end).
 
 ## 1. What this board is
 
