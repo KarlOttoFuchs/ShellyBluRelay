@@ -30,17 +30,20 @@ Last updated: 2026-10-06
   `Hardware/FEHA-LSC-001-01-Controller-Rev-A/scripts/fit_placement.py` (all 40 parts, no overlaps).
 - **Layout steps 1–2 done 2026-10-06:** placement applied, then Karl placed the buck as one
   block; it did not fit, so the board went to **50 × 30 mm (DEC-35)**: buck block under the
-  module, +Y-referenced parts up 5 mm. The board file is now the placement of record
-  (`fit_placement.py` holds the superseded 50 × 25 table). D3/R7 (status LED) are still parked
-  off the board, below it. Board set up by `scripts/setup_board.py` (width argument):
-  4 layers, outline with 0.5 mm notch fillets, origin at the centre, CON-3 part keep-outs on
-  F.Cu, antenna keep-out on L1–L4, GND pours L1–L4; board rules (DEC-34) and netclasses per
-  DEC-36 in `.kicad_pro`. DRC leaves only routing-stage items: 55 unconnected, 1 starved
-  thermal (U1 pin 2), 9 silkscreen to tidy, plus the PCM_JLCPCB library warnings (kicad-cli
-  only); no courtyard overlaps.
+  module, +Y-referenced parts up 5 mm. Karl then refined the placement by hand (incl. D3/R7);
+  the board file is the placement of record (`fit_placement.py` holds the superseded
+  50 × 25 table). Board set up by `scripts/setup_board.py` (width argument; re-runnable, keeps
+  hand-drawn pours): 4 layers, outline with 0.5 mm notch fillets, origin at the centre, CON-3
+  part keep-outs on F.Cu, antenna keep-out on L1–L4, GND pours L1–L4. Board rules DEC-34;
+  netclasses and pre-defined sizes DEC-36/DEC-37 (PWR_3V3 0.5 mm; tracks 0.25/0.3/0.5/1.0).
+  Buck pours on F.Cu (priority 1, solid): `SW F.Cu` hugging U1.6/C7.2/L1.2 (TI §11.1.1: SW node short, just wide
+  enough); `+24V buck in F.Cu` on U1 VIN pins and C3/C8/C9 pin 1, kept off the IC interior so
+  GND reaches U1 pin 2. Routing started (first +3V3 segment).
 - **Next:** layout gate, in this order:
-  3. Karl places D3/R7 and routes; check against §7 rules 1–9 and register A-4 (USB pair as a pair, clear of
-     the antenna).
+  3. Karl routes; check against §7 rules 1–9 and register A-4 (USB pair as a pair, clear of
+     the antenna). CN1: tie each pin's two pads together via 2 × 0.45/0.3 vias per pad in the
+     gap under the housing (not in the pads), +24V on L4; VIN_N is its own net to Q1.
+     Open DRC items: C2 pin 2 starved thermal; silkscreen tidy.
   4. Enclosure: update `enclosure_rev_b.py` to the groove (DEC-29), 30 mm board width (DEC-35) and the
      new button/LED/connector positions from the final placement; regenerate the STLs. Then
      rebuild the enclosure-fit page (claude.ai artifact "LSC Tube Fit",
@@ -391,7 +394,8 @@ capacitors) are picked from basic/preferred parts.
 | DEC-33 | 2026-10-06 | Vias 0.45/0.3 mm everywhere (two side by side where a 1 A net changes layer). Netclasses: Default (0.25 mm track) and PWR_1A (1.0 mm: `/+24V`, `/VIN_N`, `/LED_N`). Board origin at the board centre | Via size proven on GeyserSense (FEHA-GTS-001). The tube and both caps are symmetric about their mid-plane, so centre coordinates map straight onto the enclosure and survive length changes | superseded-by: DEC-36 (netclasses; vias and origin stand)
 | DEC-34 | 2026-10-06 | Board rules: copper-to-edge clearance 0.3 mm; minimum via 0.4 mm, minimum annular ring 0.075 mm. Stack-up nominal 1.6 mm (KiCad default 4-layer), built to JLCPCB's standard 4-layer stack-up | The 0.5 mm default failed on settled geometry: the U2 GND pad row sits 0.4 mm from the notch (DEC-31), CN1/CN2 pads 0.3 mm from the short edges. JLCPCB's routed-edge minimum is 0.2 mm. The via minimums are GeyserSense's (FEHA-GTS-001), where DEC-33's 0.45/0.3 via was proven; the 0.5 / 0.1 defaults reject it. No impedance-controlled nets (§7), so the dielectric split does not matter. Rejected: per-item DRC exclusions, a custom rule for U2/CN1/CN2 only |
 | DEC-35 | 2026-10-06 | Board 50 × 30 mm (was 50 × 25, DEC-30); stack-up unchanged. The buck sits as one block under the module, parts referenced to the +Y edge (module, notch, D2/TP1, CN3/D4, module-side passives) move up 5 mm, CN1/CN2 stay centred | Karl's buck placement (TI layout: input caps, U1, L1, output cap and divider in one tight block) is 14.2 × 9.3 mm; the strip under the module was 5.8 mm tall. The fit needs ≥ 28.7 mm; Karl chose 30. Stays inside JLCPCB's 50 × 50 mm price tier. Tube ≈ 34.2 mm wide (was 29.2). Rejected: lengthening (a 14 mm buck column gives ≈ 64 mm, outside the price tier, as for DEC-30), squeezing the buck flat to fit 5.8 mm (loses the tight layout) |
-| DEC-36 | 2026-10-06 | Netclasses: Default 0.25 mm, PWR_1A 1.0 mm (`/+24V`, `/VIN_N`, `/LED_N`), new PWR_3V3 0.6 mm (`+3V3`); vias 0.45/0.3 in all. Pre-defined sizes: tracks 0.25 / 0.4 / 0.6 / 1.0 mm, via 0.45/0.3 | The buck output feeds the ESP32's radio current peaks (a few hundred mA); 0.25 mm Default is thin for that. 0.6 mm on 1 oz carries it with margin and still fits beside the module. Pre-defined sizes let W / Shift+W step widths; the netclass width stays the default. GND stays in Default (planes carry it) |
+| DEC-36 | 2026-10-06 | Netclasses: Default 0.25 mm, PWR_1A 1.0 mm (`/+24V`, `/VIN_N`, `/LED_N`), new PWR_3V3 0.6 mm (`+3V3`); vias 0.45/0.3 in all. Pre-defined sizes: tracks 0.25 / 0.4 / 0.6 / 1.0 mm, via 0.45/0.3 | The buck output feeds the ESP32's radio current peaks (a few hundred mA); 0.25 mm Default is thin for that. 0.6 mm on 1 oz carries it with margin and still fits beside the module. Pre-defined sizes let W / Shift+W step widths; the netclass width stays the default. GND stays in Default (planes carry it) | superseded-by: DEC-37 (widths; classes and vias stand)
+| DEC-37 | 2026-10-06 | Narrower widths: PWR_3V3 0.5 mm (was 0.6); pre-defined tracks 0.25 / 0.3 / 0.5 / 1.0 mm (0.4 → 0.3, 0.6 → 0.5). Default and PWR_1A unchanged. The two +3V3 segments already routed at 0.6 set to 0.5 | Karl: 0.6 and 0.4 were just a bit too wide. 0.5 mm on 1 oz still carries the few-hundred-mA radio peaks with margin. DRC unchanged (no new violations) |
 
 **Baseline rule:** until the first schematic gate closes, this table is a *baseline* — rows are
 edited in place, not superseded. After that gate, a changed decision gets

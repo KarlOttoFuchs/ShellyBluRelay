@@ -15961,6 +15961,22 @@
 		(layer "Edge.Cuts")
 		(uuid "36fba148-5880-48b2-b57f-6b712597ed44")
 	)
+	(segment
+		(start 119.1 109.9)
+		(end 117.5082 109.9)
+		(width 0.5)
+		(layer "F.Cu")
+		(net "+3V3")
+		(uuid "d3e58eba-e18a-40a5-ae64-ff08cbef6e29")
+	)
+	(segment
+		(start 117.5082 109.9)
+		(end 117.507 109.9012)
+		(width 0.5)
+		(layer "F.Cu")
+		(net "+3V3")
+		(uuid "fb802855-e51f-45ab-a9ad-d1a738131fb8")
+	)
 	(zone
 		(layer "F.Cu")
 		(uuid "06261377-2e16-4836-9453-329458c373a4")
