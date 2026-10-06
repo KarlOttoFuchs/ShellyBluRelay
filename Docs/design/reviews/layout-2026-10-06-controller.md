@@ -39,7 +39,7 @@ ignore belongs to it.
 | L-6 | Minor | finding | spec §7 rules 3/4 | The board deviates from two §7 rules, and no DEC row records either deviation. +24V runs on F.Cu down the left side to the buck and from the via pair to CN2/D1/C10 (rule 4 says L4; only §0 mentions it). VIN_N is a 1.0 mm track, not a pour (rule 3 says a wide pour; this is within rule 6). The B.Cu +24V run under the module does follow rule 4. Fix: a DEC row superseding those parts of rules 3/4, or reroute. (pcbnew, spec) | **closed 2026-10-06** — Karl 2026-10-06: fix the document. §7 rules 3 and 4 state the board as built (DEC-40) |
 | L-7 | Minor | finding | Q2/CN2, U1/L1, C5/L1, CN1/L1 | Found by the courtyard check that L-3 re-enabled: 4 `courtyards_overlap` errors, all courtyard-margin only. Overlaps 0.29 × 3.45 / 0.66 × 0.97 / 0.19 × 3.33 / 2.23 × 0.22 mm. Nearest pads Q2.3–CN2.2 0.26 mm (both LED_N), U1.6–L1.2 0.92 mm (both SW), C5.1–L1.1 0.36 mm (both +3V3), CN1.2–L1.2 2.42 mm. No pad or body collision (body outlines from the footprint silk). Decide: accept as DRC exclusions, or move parts. (DRC, pcbnew) | **accepted 2026-10-06** — Karl 2026-10-06: accept; the four violations are DRC exclusions in the board file (courtyard margin only; moving parts would loosen the buck loop and the §7 output corner). Hand-rework note: hot air on L1 also reflows U1/C5, on Q2 part of CN2. Profile deferral `courtyard-margin-overlaps` |
 | A-L1 | Advisory | finding | U2 silk | The antenna notch clips U2's silk (3 DRC warnings, already open in §0). The fab clips silk at the edge anyway. Accept, or trim the silk line in the board copy. (DRC) | **accepted 2026-10-06** — Karl 2026-10-06: the 3 `silk_edge_clearance` warnings excluded in DRC (fab clips silk at the edge) |
-| A-L2 | Advisory | finding | §7 rule 7 | The commutation loop Q2 drain → D1 → +24V → C10 → GND vias → Q2 source occupies ≈ 13 × 12 mm (target ≈ 10 × 10). D1 sits above the LED− pin (anode 4 mm from CN2.2), and its cathode returns down x = 141.45 under the CN2 housing to the + pin (8 mm). C10 is 3 mm from CN2.1, and Q2 drain is 2.5 mm from CN2.2. The loop closes over solid L2 GND. Acceptable; note only. (pcbnew) | open |
+| A-L2 | Advisory | finding | §7 rule 7 | The commutation loop Q2 drain → D1 → +24V → C10 → GND vias → Q2 source occupies ≈ 13 × 12 mm (target ≈ 10 × 10). D1 sits above the LED− pin (anode 4 mm from CN2.2), and its cathode returns down x = 141.45 under the CN2 housing to the + pin (8 mm). C10 is 3 mm from CN2.1, and Q2 drain is 2.5 mm from CN2.2. The loop closes over solid L2 GND. Acceptable; note only. (pcbnew) | **accepted 2026-10-06** — Karl 2026-10-06: accept as built. Estimated overshoot ≈ 0.2 V (≈ 10 nH × 17 A/µs) against 40 V V_DS; edge energy ends ≈ 5 MHz, far below BLE; the strip cable loop dominates. Revisit only on a faster gate drive, > 1.5 A, or a 1–30 MHz EMC peak (then 100 nF at D1 cathode to GND) |
 
 ## Project must-check rules
 
@@ -95,10 +95,14 @@ L-PLACE-3 and L-PLACE-5 (enclosure step 4). Fiducials and position-file content 
 Round 1 (Karl 2026-10-06): L-1, L-3 fixed; L-4 fixed by Karl; L-5, L-6 closed by document
 change (DEC-40); L-2 withdrawn.
 Round 2 (Karl 2026-10-06): L-7 accepted as DRC exclusions; A-L1 accepted (silk warnings
-excluded). Verified: the saved `.kicad_pro` holds the 7 exclusions; fresh DRC 0 unconnected, 0 parity,
+excluded). Round 3 (Karl 2026-10-06): A-L2 accepted. Verified: the saved `.kicad_pro` holds the 7 exclusions; fresh DRC 0 unconnected, 0 parity,
 0 unexcluded errors, 27 `lib_footprint_issues` warnings (CLI-only, Method note). After the fixes: DRC 0 unconnected, 0 parity, 4
 courtyards_overlap errors (L-7), 27 + 3 warnings as in the Method note.
 
 ## Gate status
 
-OPEN — no open Blocker, Major or Minor; only A-L2 (Advisory, note only) awaits Karl's disposition. Ready to close on Karl's word.
+**CLOSED (2026-10-06)** — Karl 2026-10-06: close. Full run, checklist v1.3, plus re-verification of
+the fixed board (fresh DRC: 0 unconnected, 0 parity, 0 unexcluded errors). No open Blocker,
+Major or Minor; all findings dispositioned (L-1, L-3, L-4 fixed; L-5, L-6 by DEC-40; L-2
+withdrawn; L-7, A-L1, A-L2 accepted). Carried to the fab gate: L-PLACE-3 and L-PLACE-5
+(enclosure step 4), fiducials and position-file content. Profile `current_gate: fab`.

@@ -22,6 +22,10 @@ Last updated: 2026-10-06
   100 nF), CHG-02 (debug header in standard USB order), yellow status LED (DEC-28). §7 carries
   the connector loss and the in-tube current ceiling (1.5 A practical). From here the decision
   log is superseded, not edited (§11 baseline rule).
+- **Layout gate: CLOSED 2026-10-06**
+  ([`reviews/layout-2026-10-06-controller.md`](reviews/layout-2026-10-06-controller.md),
+  checklist v1.3): all findings dispositioned (DEC-40); DRC 0 unconnected, 0 unexcluded errors.
+  Carried to the fab gate: enclosure fit and wire entry (L-PLACE-3/5), fiducials, position file.
 - **Blocked on:** —
 - **Layout decisions 2026-10-06:** wall groove (DEC-29); board 50 × 25 mm, 4 layers, stack-up
   L1 routing + GND / L2 GND / L3 GND / L4 routing + GND (DEC-30); antenna notch (DEC-31); debug
@@ -53,10 +57,7 @@ Last updated: 2026-10-06
   ([`reviews/layout-2026-10-06-controller.md`](reviews/layout-2026-10-06-controller.md),
   checklist v1.3): dispositions in DEC-40 (VIN_N via pairs, courtyards added and the check
   re-enabled, §7 rules 3/4/9 updated to the board as built, EPAD finding withdrawn).
-- **Next:** layout gate, in this order:
-  3. Close the layout gate: all findings dispositioned (L-7 courtyard overlaps and A-L1 U2
-     silk are DRC exclusions); only the A-L2 loop-size note remains. DRC: 0 unconnected, 0
-     unexcluded errors.
+- **Next:**
   4. Enclosure: update `enclosure_rev_b.py` to the groove (DEC-29), 30 mm board width (DEC-35) and the
      new button/LED/connector positions from the final placement; regenerate the STLs. Then
      rebuild the enclosure-fit page (claude.ai artifact "LSC Tube Fit",
