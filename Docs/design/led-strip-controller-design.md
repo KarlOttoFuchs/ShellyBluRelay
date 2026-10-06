@@ -58,12 +58,16 @@ Last updated: 2026-10-06
   checklist v1.3): dispositions in DEC-40 (VIN_N via pairs, courtyards added and the check
   re-enabled, §7 rules 3/4/9 updated to the board as built, EPAD finding withdrawn).
 - **Next:**
-  4. Enclosure: update `enclosure_rev_b.py` to the groove (DEC-29), 30 mm board width (DEC-35) and the
-     new button/LED/connector positions from the final placement; regenerate the STLs. Then
-     rebuild the enclosure-fit page (claude.ai artifact "LSC Tube Fit",
+  4. Enclosure: FreeCAD model done 2026-10-06. `build_enclosure.py` (replaces
+     `enclosure_rev_b.py`) builds a parametric document (Params spreadsheet, Tube and Cap
+     PartDesign Bodies, OUT cap as a Link, board STEP from KiCad) with the groove (DEC-29) and
+     the 30 mm board (DEC-35); S1/D3 positions read from the board file; fit check passes
+     (board slides the full tube, clears both caps); STLs regenerated. Remaining: rebuild the
+     enclosure-fit page (claude.ai artifact "LSC Tube Fit",
      https://claude.ai/artifact/8Cz9GvjaSQ5Euj6Yx1rkBk) and `Enclosure/.../enclosure-concept.html`
      to show the final state only: groove section, final placement, PCB rules. No drafts (the
-     page still shows the superseded rails/ribs and earlier proposals).
+     page still shows the superseded rails/ribs and earlier proposals). Then print a short tube
+     test section for the groove fit.
 
 ## 1. What this board is
 
@@ -80,7 +84,7 @@ Shelly BLU sensors over BLE, in an inline printed tube between the power supply 
 | Mains / SELV class | SELV only (24 V DC); no mains on the board |
 | ESD exposure | None designed for (DEC-19): push-in terminals are wired with the supply off, the USB header is bench-only, and the board lives inside a closed tube |
 | EMC target | None formal at prototype; keep switching loops small near the BLE radio (§7 rule 7) |
-| Enclosure | `FEHA-LSC-001-02`: slide-in tube, two identical snap-on end caps, 119.4 × 27.8 × 15.8 mm |
+| Enclosure | `FEHA-LSC-001-02`: slide-in tube, two identical snap-on end caps, 103.4 (incl. screw tabs) × 37.8 × 15.8 mm |
 | Test strategy | Functional, JLCPCB PCBA, small batches (DEC-20; mirrors `review-profile.yml`) |
 
 ### 1.1 Hard constraints and requirements (with sources)
