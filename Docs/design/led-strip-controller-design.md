@@ -10,19 +10,21 @@ written here cannot be reviewed against (DOC-4).
 
 ## 0. Roadmap — session pickup point
 
-Last updated: 2026-10-02
+Last updated: 2026-10-06
 
 - **Settled:** load and output stage (DEC-01…DEC-06), power (DEC-07, DEC-08), input protection
-  (DEC-09…DEC-12), connectors, USB, UI and enclosure (DEC-13…DEC-16), module (DEC-27). Concept review register:
-  [`reviews/schematic-2026-10-02-rev-b-concept.md`](reviews/schematic-2026-10-02-rev-b-concept.md)
-  (no open Blocker or Major). Cost pass 2026-10-02: adjustable FPWM buck, no input fuse
-  (supply requirement CON-7 instead), HL2310A reverse MOSFET, MINI-1-H4X module; 5 extended lines.
-- **Open questions:** the supply's overcurrent behaviour (not published; bench test in §10); low-end PWM linearity (open register row).
-- **Schematic:** first capture complete (commit 6039da4): reverse polarity, TVS, buck, MCU
-  core, output stage, USB debug header CN3 (locking press-fit footprint, DNP). ERC clean apart
-  from kicad-cli library-path warnings. Net class `PWR_1A` (1.0 mm) on +24V, VIN_N, LED_N, GND.
+  (DEC-09…DEC-12), connectors, USB, UI and enclosure (DEC-13…DEC-16), module (DEC-27), status
+  LED (DEC-28). Cost pass 2026-10-02: adjustable FPWM buck, no input fuse (supply requirement
+  CON-7 instead), HL2310A reverse MOSFET, MINI-1-H4X module; 5 extended lines.
+- **Open questions:** the supply's overcurrent behaviour (not published; bench test in §10).
+- **Schematic:** captured and through the full schematic review
+  ([`reviews/schematic-2026-10-02-controller.md`](reviews/schematic-2026-10-02-controller.md)):
+  every finding closed or accepted, every advisory dispositioned; changes CHG-01 (buck input
+  100 nF), CHG-02 (debug header in standard USB order) and the yellow status LED (DEC-28). ERC
+  clean apart from kicad-cli library-path warnings. The gate is not yet closed.
 - **Blocked on:** —
-- **Next:** full schematic review gate (`hardware-design-review`, register in `reviews/`).
+- **Next:** one further check Karl is bringing; if it changes nothing, close the schematic gate
+  (fresh full re-run, profile `current_gate: layout`, register CLOSED, push). Then layout.
 
 ## 1. What this board is
 
