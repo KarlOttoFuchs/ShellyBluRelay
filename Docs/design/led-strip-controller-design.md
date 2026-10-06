@@ -44,6 +44,12 @@ Last updated: 2026-10-06
   board edge (1.4 is the largest that clears D2's silk) plus `IN` (CN1) / `OUT` (CN2) 1.2 mm;
   B.SilkS `+`/`-` 2.5 mm behind the pins plus `IN`/`OUT` 2.5 mm. CN1 has + on the top pin
   (y = 113), CN2 has + on the bottom pin (y = 117).
+  Back: FEHA logo (`_FEHA-LSC-001:logo`, copied from GeyserSense) centred at x = 125 with
+  the GeyserSense name block under it (`${TITLE}` / Designed by `${COMMENT1}` / PN `${COMMENT2}`,
+  1 mm bold, bottom at y = 129.2), same 11 mm logo-to-text offset as FEHA-GTS-001.
+  24 V routing reviewed 2026-10-06 against §7 rules 1–7 (DEC-39): via pairs, MOSFET
+  source vias and the Q2 drain pour added; +24V to the buck runs on F.Cu down the left side
+  (not L4 as rule 4 says), well clear of the module.
 - **Next:** layout gate, in this order:
   3. Karl routes; check against §7 rules 1–9 and register A-4 (USB pair as a pair, clear of
      the antenna). CN1: tie each pin's two pads together via 2 × 0.45/0.3 vias per pad in the
@@ -402,6 +408,7 @@ capacitors) are picked from basic/preferred parts.
 | DEC-36 | 2026-10-06 | Netclasses: Default 0.25 mm, PWR_1A 1.0 mm (`/+24V`, `/VIN_N`, `/LED_N`), new PWR_3V3 0.6 mm (`+3V3`); vias 0.45/0.3 in all. Pre-defined sizes: tracks 0.25 / 0.4 / 0.6 / 1.0 mm, via 0.45/0.3 | The buck output feeds the ESP32's radio current peaks (a few hundred mA); 0.25 mm Default is thin for that. 0.6 mm on 1 oz carries it with margin and still fits beside the module. Pre-defined sizes let W / Shift+W step widths; the netclass width stays the default. GND stays in Default (planes carry it) | superseded-by: DEC-37 (widths), DEC-38 (GND class); vias stand
 | DEC-37 | 2026-10-06 | Narrower widths: PWR_3V3 0.5 mm (was 0.6); pre-defined tracks 0.25 / 0.3 / 0.5 / 1.0 mm (0.4 → 0.3, 0.6 → 0.5). Default and PWR_1A unchanged. The two +3V3 segments already routed at 0.6 set to 0.5 | Karl: 0.6 and 0.4 were just a bit too wide. 0.5 mm on 1 oz still carries the few-hundred-mA radio peaks with margin. DRC unchanged (no new violations) |
 | DEC-38 | 2026-10-06 | New netclass GND 0.5 mm (`GND`), vias 0.45/0.3, priority 2 | Karl: 0.5 mm is a good size for the short stubs from cap pads to GND vias. Replaces DEC-36's "GND stays in Default"; planes still carry GND. DRC unchanged |
+| DEC-39 | 2026-10-06 | 24 V routing review fixes: second 0.45/0.3 via at both +24V layer changes (CN1 end 113.45/114.75, CN2 end 134.35/115.45); Q1 source 2 GND vias (rule 3), Q2 source second GND via (rule 2); Q2 drain LED_N pour 5.5 × 6 mm on F.Cu and B.Cu (priority 2, solid), 6 stitching vias | DEC-33 asks for two vias per 1 A layer change; Q1's source had no via (3.9 mm to the nearest) and carries the whole return current. Rule 1 asks ≈ 1 cm²: the corner between the module, D1 and CN2 holds ≈ 32 mm² per side (≈ 0.65 cm² with both, plus the pads); growing it means moving toward the antenna (rule 1 says keep away) or into the USB pair. Ample at 1.5 m; the 3 m soak test (§10) decides whether more is needed. DRC unchanged |
 
 **Baseline rule:** until the first schematic gate closes, this table is a *baseline* — rows are
 edited in place, not superseded. After that gate, a changed decision gets
