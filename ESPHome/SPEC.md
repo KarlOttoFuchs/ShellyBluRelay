@@ -80,7 +80,7 @@ This is a **KISS template starting point** for Home Assistant enthusiasts:
 
 | Event | Value | Default Action |
 |-------|-------|----------------|
-| Single press | 0x01 | Toggle relay |
+| Single press | 0x01 | Turn ON relay, start timer |
 | Double press | 0x02 | Configurable (default: none) |
 | Triple press | 0x03 | Configurable (default: none) |
 | Long press | 0x04 | Configurable (default: none) |
@@ -155,6 +155,7 @@ This is a **KISS template starting point** for Home Assistant enthusiasts:
 | Retrigger Mode | `select` | EXTEND or IGNORE |
 | Timer Remaining | `sensor` | Seconds remaining (0 if inactive) |
 | Sensor Battery | `sensor` | BLU device battery % |
+| Device Mode | `text_sensor` | Current mode: "Scanner", "Unconfigured", or "{type}: {MAC}" (diagnostics) |
 | Last Event MAC | `text_sensor` | MAC address of last seen BLU event (diagnostics) |
 | Last Event RSSI | `sensor` | Signal strength of last event in dBm (diagnostics) |
 | Last Event Type | `text_sensor` | Event type: "button_single", "motion_detected", etc. (diagnostics) |
@@ -212,8 +213,9 @@ Service UUID: `0xFCD2`
 2. **Scanner vs operational** - Scanner mode and operational mode are mutually exclusive; scanner overrides all operation even if MAC is configured
 3. **Timer persistence** - Timer duration and retrigger mode should persist across reboots (use ESPHome `restore_value`)
 4. **Manual control override** - When user toggles relay via HA, timer does NOT start. Additionally, if relay is manually ON, sensor triggers are ignored entirely — manual control takes priority until user turns relay OFF
-5. **Button actions** - Double/triple/long press actions left as customization points with clear comments
-6. **Diagnostic sensors** - Last Event MAC/RSSI/Type sensors update on ANY BTHome event from configured MAC, enabling runtime debugging without scanner mode
+5. **All sensor types use timer** - Button, motion, and door all activate relay with timer. Double/triple/long press actions left as customization points with clear comments
+6. **Diagnostic sensors** - Last Event MAC/RSSI/Type and Device Mode sensors update on ANY BTHome event from configured MAC, enabling runtime debugging without scanner mode
+7. **Event deduplication** - Shelly BLU devices broadcast the same event value repeatedly until it changes. Code tracks last event value and only triggers on value CHANGE to prevent relay chatter
 
 ---
 

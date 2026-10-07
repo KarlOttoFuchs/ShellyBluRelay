@@ -31,7 +31,7 @@ substitutions:
   # Shelly BLU device MAC address (required for operation)
   # Format: XX:XX:XX:XX:XX:XX
   # Find using scanner_mode or Shelly app
-  shelly_blu_mac: "00:00:00:00:00:00"
+  shelly_blu_mac: "5C:C7:C1:F5:C9:AC"
 
   # Sensor type: "button", "motion", or "door"
   sensor_type: "button"
@@ -54,6 +54,8 @@ substitutions:
 esphome:
   name: ${device_name}
   friendly_name: ${friendly_name}
+  # Build path outside project to avoid spaces in path (ESP-IDF limitation)
+  build_path: /tmp/esphome-builds/${device_name}
 
   on_boot:
     priority: 200
@@ -133,6 +135,20 @@ globals:
     restore_value: no
     initial_value: '""'
 
+  # Motion: 0x00=clear, 0x01=detected
+  # Only trigger on transition from 0→1
+  - id: last_motion_state
+    type: uint8_t
+    restore_value: no
+    initial_value: "0"
+
+  # Door: 0x00=closed, 0x01=open
+  # Only trigger on transition from 0→1
+  - id: last_door_state
+    type: uint8_t
+    restore_value: no
+    initial_value: "0"
+
 # -----------------------------------------------------------------------------
 # CONNECTIVITY
 # -----------------------------------------------------------------------------
@@ -191,7 +207,7 @@ esp32_ble_tracker:
               auto data = service_data.data;
               if (data.size() < 3) continue;
 
-              // Scanner mode: log all BTHome devices
+              // Scanner mode: log all BTHome devices and update HA sensors
               if (is_scanner) {
                 // Detect device type from object IDs present
                 std::string device_type = "Unknown";
@@ -202,6 +218,12 @@ esp32_ble_tracker:
                 }
                 ESP_LOGI("SCANNER", "MAC: %s | RSSI: %d dBm | Type: %s",
                          mac_str, x.get_rssi(), device_type.c_str());
+
+                // Update diagnostic globals for HA visibility
+                id(last_event_mac_addr) = mac_str;
+                id(last_event_rssi_val) = x.get_rssi();
+                id(last_event_type_str) = "scan:" + device_type;
+
                 return;  // Scanner mode does not trigger relay
               }
 
@@ -243,16 +265,36 @@ esp32_ble_tracker:
                 if (obj_id == 0x3A && i + 1 < data.size()) {
                   uint8_t event = data[i + 1];
 
+                  // Skip "none" events (0x00) - only act on actual presses
+                  if (event == 0x00) {
+                    i += 1;
+                    continue;
+                  }
+
+                  // NO timestamp deduplication needed - state-based logic handles it:
+                  // - Relay OFF: first packet turns it ON
+                  // - Relay ON: subsequent packets hit extend/ignore path (no toggle)
+                  // This matches firmware behavior exactly.
+
                   if (event == 0x01) {  // Single press
                     id(last_event_type_str) = "button_single";
                     ESP_LOGI("shelly_blu", "Button: single press");
 
-                    // Button single press = toggle (no timer)
-                    bool was_on = id(relay).state;
-                    id(relay).toggle();
-                    // Only set manual_control if we turned ON (not when toggling OFF)
-                    if (!was_on) {
-                      id(manual_control) = true;
+                    // Button activates relay with timer (same as motion/door)
+                    // Check retrigger mode if already on
+                    if (id(relay).state && id(timer_active)) {
+                      std::string mode = id(retrigger_mode).state;
+                      if (mode == "ignore") {
+                        ESP_LOGD("shelly_blu", "Retrigger ignored");
+                      } else {
+                        // Extend - restart timer
+                        id(auto_off_timer).execute();
+                      }
+                    } else {
+                      // Turn on and start timer
+                      id(manual_control) = false;
+                      id(relay).turn_on();
+                      id(auto_off_timer).execute();
                     }
                   }
                   else if (event == 0x02) {  // Double press
@@ -283,7 +325,16 @@ esp32_ble_tracker:
                 if (obj_id == 0x21 && i + 1 < data.size()) {
                   uint8_t motion = data[i + 1];
 
-                  if (motion == 0x01) {  // Motion detected
+                  // Deduplication: Only trigger on state CHANGE
+                  // Shelly BLU broadcasts same state repeatedly
+                  uint8_t prev_motion = id(last_motion_state);
+                  if (motion == prev_motion) {
+                    i += 1;
+                    continue;  // Same state, skip
+                  }
+                  id(last_motion_state) = motion;
+
+                  if (motion == 0x01) {  // Motion detected (transition 0→1)
                     id(last_event_type_str) = "motion_detected";
                     ESP_LOGI("shelly_blu", "Motion: detected");
 
@@ -307,7 +358,7 @@ esp32_ble_tracker:
                         id(auto_off_timer).execute();
                       }
                     }
-                  } else {  // Motion clear
+                  } else {  // Motion clear (transition 1→0)
                     id(last_event_type_str) = "motion_clear";
                     ESP_LOGD("shelly_blu", "Motion: clear");
                     // Timer handles off - no action needed
@@ -320,7 +371,15 @@ esp32_ble_tracker:
                 if (obj_id == 0x2D && i + 1 < data.size()) {
                   uint8_t door = data[i + 1];
 
-                  if (door == 0x01) {  // Opened
+                  // Deduplication: Only trigger on state CHANGE
+                  uint8_t prev_door = id(last_door_state);
+                  if (door == prev_door) {
+                    i += 1;
+                    continue;  // Same state, skip
+                  }
+                  id(last_door_state) = door;
+
+                  if (door == 0x01) {  // Opened (transition 0→1)
                     id(last_event_type_str) = "door_opened";
                     ESP_LOGI("shelly_blu", "Door/Window: opened");
 
@@ -342,7 +401,7 @@ esp32_ble_tracker:
                         id(auto_off_timer).execute();
                       }
                     }
-                  } else {  // Closed
+                  } else {  // Closed (transition 1→0)
                     id(last_event_type_str) = "door_closed";
                     ESP_LOGD("shelly_blu", "Door/Window: closed");
                     // Customization point - add your action here
@@ -359,7 +418,7 @@ esp32_ble_tracker:
 script:
   # Auto-off timer script
   - id: auto_off_timer
-    mode: restart  # Restart allows extending the timer
+    mode: restart # Restart allows extending the timer
     then:
       - lambda: |-
           id(timer_active) = true;
@@ -400,9 +459,14 @@ switch:
           if (!id(timer_active) && !id(manual_control)) {
             id(manual_control) = true;
           }
-      - light.turn_on:
-          id: led_status
-          effect: "Solid"
+
+          // Only show solid LED if configured
+          bool is_unconfigured = (strcmp("${shelly_blu_mac}", "00:00:00:00:00:00") == 0);
+          if (!is_unconfigured) {
+            auto call = id(led_status).turn_on();
+            call.set_effect("Solid");
+            call.perform();
+          }
 
     on_turn_off:
       - lambda: |-
@@ -410,9 +474,14 @@ switch:
           id(timer_active) = false;
           id(timer_remaining_seconds) = 0;
       - script.stop: auto_off_timer
-      - light.turn_on:
-          id: led_status
-          effect: "Slow Blink"
+      - lambda: |-
+          // Only show slow blink if configured, otherwise keep LED off
+          bool is_unconfigured = (strcmp("${shelly_blu_mac}", "00:00:00:00:00:00") == 0);
+          if (!is_unconfigured) {
+            auto call = id(led_status).turn_on();
+            call.set_effect("Slow Blink");
+            call.perform();
+          }
 
 # -----------------------------------------------------------------------------
 # CONFIGURATION ENTITIES
@@ -466,13 +535,13 @@ light:
               duration: 200ms
             - state: false
               duration: 200ms
-      - lambda:
+      - strobe:
           name: "Solid"
-          update_interval: 1000ms
-          lambda: |-
-            auto call = id(led_status).turn_on();
-            call.set_brightness(1.0);
-            call.perform();
+          colors:
+            - state: true
+              duration: 1000ms
+            - state: true
+              duration: 1000ms
 
   - platform: binary
     name: "Error LED"
@@ -541,12 +610,29 @@ sensor:
 
 text_sensor:
   - platform: template
+    name: "Device Mode"
+    id: device_mode
+    icon: "mdi:cog"
+    entity_category: diagnostic
+    lambda: |-
+      bool is_scanner = (strcmp("${scanner_mode}", "true") == 0);
+      bool is_unconfigured = (strcmp("${shelly_blu_mac}", "00:00:00:00:00:00") == 0);
+
+      if (is_scanner) {
+        return {"Scanner"};
+      } else if (is_unconfigured) {
+        return {"Unconfigured"};
+      } else {
+        return {"${sensor_type}: ${shelly_blu_mac}"};
+      }
+
+  - platform: template
     name: "Last Event MAC"
     id: last_mac
     icon: "mdi:bluetooth"
     entity_category: diagnostic
     update_interval: 5s
-    lambda: 'return id(last_event_mac_addr);'
+    lambda: "return id(last_event_mac_addr);"
 
   - platform: template
     name: "Last Event Type"
@@ -554,7 +640,7 @@ text_sensor:
     icon: "mdi:gesture-tap"
     entity_category: diagnostic
     update_interval: 5s
-    lambda: 'return id(last_event_type_str);'
+    lambda: "return id(last_event_type_str);"
 
 binary_sensor:
   - platform: status
