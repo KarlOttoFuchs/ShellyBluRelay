@@ -27,6 +27,12 @@ Last updated: 2026-10-07
   checklist v1.3): all findings dispositioned (DEC-40); DRC 0 unconnected, 0 unexcluded errors.
   Carried to the fab gate: fiducials, position file. Enclosure fit and wire entry (L-PLACE-3/5)
   closed on the model 2026-10-07 (fit check in `build_enclosure.py`); the test print confirms them.
+- **Manufacturing files generated 2026-10-07** (Karl, KiCad Fabrication Toolkit) in
+  `Hardware/FEHA-LSC-001-01-Controller-Rev-A/production/`: `LED_Strip_Controller_A.zip`
+  (Gerbers, drill files), `bom.csv` (25 lines; CN3 DNP), `positions.csv` (33 parts, board-centre
+  origin), `designators.csv`, `netlist.ipc`. The zip's Gerbers carry every silkscreen
+  feature of the saved board (checked 2026-10-07). DRC at generation: 0 unconnected, 0 parity,
+  27 `lib_footprint_issues` warnings. Fab gate review not yet run.
 - **Blocked on:** —
 - **Layout decisions 2026-10-06:** wall groove (DEC-29); 4 layers, stack-up L1 routing + GND /
   L2 GND / L3 GND / L4 routing + GND (DEC-30; its 50 × 25 mm size superseded by DEC-35); antenna
@@ -44,6 +50,9 @@ Last updated: 2026-10-07
   Buck pours on F.Cu (priority 1, solid): `SW F.Cu` hugging U1.6/C7.2/L1.2 (TI §11.1.1: SW node short, just wide
   enough); `+24V buck in F.Cu` on U1 VIN pins and C3/C8/C9 pin 1, kept off the IC interior so
   GND reaches U1 pin 2. Routing done by Karl (DRC 0 unconnected).
+  Operating limits on F.SilkS (CHG-03, 2026-10-07): `24V DC ONLY`, `LOAD MAX 1A`,
+  `PSU MAX 30W`, `USB:24V OFF`. Solder-mask-to-copper clearance set to 0.005 mm (was 0),
+  2026-10-07.
   Polarity silkscreen at both connectors: F.SilkS `+`/`-` 1.4 mm bold beside each pin at the
   board edge (1.4 is the largest that clears D2's silk) plus `IN` (CN1) / `OUT` (CN2) 1.2 mm;
   B.SilkS `+`/`-` 2.5 mm behind the pins plus `IN`/`OUT` 2.5 mm. CN1 has + on the top pin
@@ -151,9 +160,13 @@ USB 5 V (debug header) ─ B5819W SL ─ buck VIN
   ±20 V gate limit. R_DS(on) ≤ 105 mΩ at 10 V, ≤ 125 mΩ guaranteed at 4.5 V. Reversed: body diode blocks 24 V
   of 60 V; the zener conducts forward and holds the gate ≈ −0.7 V, so the MOSFET stays off and
   its gate never sees −24 V. Board GND ≠ input − terminal.
-- **TVS** (DEC-10): SMBJ26A across +24 V and board GND, after the reverse MOSFET. Standoff 26 V,
-  breakdown 28.9–31.9 V, below the output MOSFET's 40 V and the buck's 38 V abs max. Its 42.1 V clamp
-  figure applies only at the full 14 A pulse rating.
+- **TVS** (DEC-10, DEC-41): SMBJ26A across +24 V and board GND, after the reverse MOSFET. Standoff
+  26 V, breakdown 28.9–31.9 V. It clamps supply overshoot, and on an overvoltage supply it fails
+  short so the supply's current limit ends the fault (CON-7). Its clamp is not guaranteed below
+  the buck's 38 V abs max or the 40 V output MOSFET and SS34 at every current: 42.1 V at the full
+  14.25 A pulse rating, below 38 V only up to ≈ 8–9 A for a worst-case part (estimate from the
+  datasheet's V_BR/V_C points). Large surges are not expected on this SELV input (hot-plug waived,
+  DEC-11; surge-protected supply, DEC-21).
 - **No fuse** (DEC-12): overcurrent protection is the supply's current limit (CON-7). The
   +24 V input runs straight from the IN connector to the TVS.
 - **No bulk electrolytic** (DEC-11): it set the enclosure height.
@@ -388,7 +401,7 @@ capacitors) are picked from basic/preferred parts.
 | DEC-07 | 2026-10-02 | TPS560430XF forced-PWM buck, adjustable, 51 kΩ / 22 kΩ divider for 3.32 V | No PFM singing. XF and X3F are both 1.1 MHz FPWM (datasheet §5); XF is $0.62 against $1.39 for the fixed X3F, for two basic 0402 resistors. TI Table 1's 51 k / 22.1 k replaced by 22 k (basic part). Rejected: X3F (price), AP63201 FPWM (no stock), AP63203 (Rev A; PFM), the no-fee bucks (TPS5430: non-synchronous, SOIC-8-EP, 4.4 mA quiescent; TPS54331: 28 V max; XL1509/LM2596: 150 kHz) |
 | DEC-08 | 2026-10-01 | 10 µH FXL0420-100-M inductor | Isat margin over the 1.4 A peak limit; verify on scope |
 | DEC-09 | 2026-10-01 | Reverse-polarity N-MOSFET in the negative line | ≤ 0.06 W at 1 A against ≈ 0.45 W for the series SS34 it replaced |
-| DEC-10 | 2026-10-01 | SMBJ26A TVS after the reverse MOSFET | Clamps supply overshoot below the buck's 38 V abs max |
+| DEC-10 | 2026-10-01 | SMBJ26A TVS after the reverse MOSFET | Clamps supply overshoot below the buck's 38 V abs max | superseded-by: DEC-41 (rationale)
 | DEC-11 | 2026-10-02 | Hot-plug waived: no damping network, no hot-plug test, no bulk electrolytic | Board never connected to a live lead; electrolytic set the enclosure height |
 | DEC-12 | 2026-10-02 | No input fuse; overcurrent protection is the supply's current limit, stated as requirement CON-7 | The 30 W PS002A limits at ≈ 1.4–1.9 A, below the 2 A fuse's rating (466 series carries 100 % of rating for ≥ 4 h), so with this supply a shorted strip or a TVS failed short is ended by the supply and the fuse could never open. Saves an extended line ($3 per order) and $0.07 per board. A 0 Ω placeholder was not adopted (jumper current rating unverified). Earlier choice: Littelfuse 0466002.NRHF 2 A in the +24 V input, removed in the 2026-10-02 cost pass; it returns with any supply that does not meet CON-7 |
 | DEC-13 | 2026-10-01 | Push-in 2-pin connectors in and out (HDGC4001SMD-S-2P) | Tool-free field wiring, 18–24 AWG |
@@ -419,6 +432,7 @@ capacitors) are picked from basic/preferred parts.
 | DEC-38 | 2026-10-06 | New netclass GND 0.5 mm (`GND`), vias 0.45/0.3, priority 2 | Karl: 0.5 mm is a good size for the short stubs from cap pads to GND vias. Replaces DEC-36's "GND stays in Default"; planes still carry GND. DRC unchanged |
 | DEC-39 | 2026-10-06 | 24 V routing review fixes: second 0.45/0.3 via at both +24V layer changes (CN1 end 113.45/114.75, CN2 end 134.35/115.45); Q1 source 2 GND vias (rule 3), Q2 source second GND via (rule 2); Q2 drain LED_N pour 5.5 × 6 mm on F.Cu and B.Cu (priority 2, solid), 6 stitching vias | DEC-33 asks for two vias per 1 A layer change; Q1's source had no via (3.9 mm to the nearest) and carries the whole return current. Rule 1 asks ≈ 1 cm²: the corner between the module, D1 and CN2 holds ≈ 32 mm² per side (≈ 0.65 cm² with both, plus the pads); growing it means moving toward the antenna (rule 1 says keep away) or into the USB pair. Ample at 1.5 m; the 3 m soak test (§10) decides whether more is needed. DRC unchanged |
 | DEC-40 | 2026-10-06 | Layout gate review dispositions (`reviews/layout-2026-10-06-controller.md`): second 0.45/0.3 via at both VIN_N layer changes (110.97/104.00, y 118.81); courtyards added to the five project-library footprints without one (Q2, U1, CN1, CN2, L1; body/pads + 0.25 mm) and DRC `missing_courtyard` back to error, logo exempt; +24V on L1 at the IN and OUT ends, L4 only under the module (§7 rule 4 as built); VIN_N as a 1.0 mm track, not a pour (rule 3); thermocouple taped to Q2, no bare pad (rule 9); module EPAD left without vias | DEC-33 asks two vias per 1 A layer change; VIN_N carries the whole return current. Courtyard check was disabled, so five parts were never overlap-checked. The L1 +24V runs stay away from the module; the planes shield the only stretch near it. A 1.0 mm track meets rule 6. Karl: taping is enough for the soak test; EPAD without vias works on GeyserSense and other boards (finding L-2 withdrawn). DRC after the change: 0 unconnected, 0 parity; 4 courtyard-margin overlaps (L-7: Q2/CN2, U1/L1, C5/L1, CN1/L1) accepted by Karl as DRC exclusions: no pad or body collision, same net on three pairs; moving parts would loosen the buck loop and the output corner |
+| DEC-41 | 2026-10-07 | DEC-10 rationale corrected; SMBJ26A kept. It clamps supply overshoot and fails short on an overvoltage supply, after which the supply's current limit ends the fault (CON-7). It does not hold the rail below the buck's 38 V abs max at every current | Datasheet: V_C 42.1 V at I_PP 14.25 A (10/1000 µs); from its V_BR max / V_C points a worst-case part stays below 38 V only up to ≈ 8–9 A (≈ 0.7 Ω dynamic, estimate). Kept because the threats it covers here are small: supply switch-on overshoot (PS002A behaviour unpublished) and a wrong, higher-voltage supply, where its short failure saves the buck, MOSFET and SS34. $0.04, JLCPCB preferred, already placed and routed. Large surges are not expected on this SELV input (DEC-11, DEC-21). Rejected: removing it (reopens the layout gate to save $0.04, leaves the wrong-supply case unprotected) |
 
 **Baseline rule:** until the first schematic gate closes, this table is a *baseline* — rows are
 edited in place, not superseded. After that gate, a changed decision gets

@@ -39,6 +39,22 @@ pigtail (5V, D−, D+, GND) would cross the data pair and the board would not en
 **Verify.** Bring-up: board enumerates as USB-Serial-JTAG through the pigtail and flashes (spec §10).
 
 
+## CHG-03 — Operating limits on the top silkscreen
+
+**Status:** Implemented · **Severity:** Minor · **Origin:** Karl, 2026-10-07 (after the layout gate)
+
+**Problem.** The board carried no installer-facing statement of its limits; the supply
+requirement (CON-7) is the board's only overcurrent protection and lived only in the spec.
+**Change.** Three F.SilkS texts, 1.2 mm bold, 0.24 mm stroke (matching the IN/OUT labels),
+left/top justified: `24V DC` / `ONLY` at (101.33, 101.33), top-left by CN1 (SELV input);
+`LOAD MAX 1A` / `PSU MAX 30W` at (135.19, 101.33), right of the antenna notch (CON-1, CON-7);
+`USB:24V OFF` at (132.62, 127.37), under CN3 (DEC-24). Karl's final wording; the first draft
+also carried "wire with power off", "current lim" and "amb 0-35°C". The load is printed as the
+1 A rating (CON-1), not the 1.5 A thermal estimate (§7).
+**Impact.** Silkscreen only. DRC unchanged: 0 unconnected, 0 parity, only the 27 existing
+`lib_footprint_issues` warnings; no silk overlap.
+**Verify.** Fab gate: texts legible in the Gerber viewer.
+
 ## Deferred / Not doing
 
 ## Open questions

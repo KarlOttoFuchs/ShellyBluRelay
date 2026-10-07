@@ -8,7 +8,7 @@ directories named `<PN>-<Slug>-Rev-<X>`.
 
 | Part Number | Slug | Current Revision | Status |
 |---|---|---|---|
-| `FEHA-LSC-001-01` | Controller | [Rev A](FEHA-LSC-001-01-Controller-Rev-A/) | Layout complete, fab gate next |
+| `FEHA-LSC-001-01` | Controller | [Rev A](FEHA-LSC-001-01-Controller-Rev-A/) | Manufacturing files generated, fab gate next |
 | `FEHA-LSC-001-02` | Enclosure | [Rev A](../Enclosure/FEHA-LSC-001-02-Enclosure-Rev-A/) | Modelled, test print next |
 
 ### FEHA-LSC-001-01 — Controller

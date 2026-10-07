@@ -2,8 +2,8 @@
 
 24 V COB LED-strip controller, Shelly BLU / BLE triggered, ESP32-C3
 
-**Status:** Layout complete — schematic gate closed 2026-10-06, layout gate closed 2026-10-06
-(50 × 30 mm, 4 layers, routed). Next: fab gate (fiducials, position file). See [`DESIGN-CHANGES.md`](DESIGN-CHANGES.md) for the
+**Status:** Manufacturing files generated 2026-10-07 — schematic and layout gates closed
+2026-10-06 (50 × 30 mm, 4 layers, routed). Next: fab gate review (fiducials, position file). See [`DESIGN-CHANGES.md`](DESIGN-CHANGES.md) for the
 change record and the design spec in
 [`../../Docs/design/led-strip-controller-design.md`](../../Docs/design/led-strip-controller-design.md)
 for intent, architecture and mechanical constraints — this README does not restate them.
@@ -20,7 +20,10 @@ for intent, architecture and mechanical constraints — this README does not res
 - `scripts/lcsc_to_kicad.py` — imports LCSC/EasyEDA parts into the project library.
 - `scripts/setup_board.py` — board setup: outline and antenna notch, centre origin, keep-out
   rule areas, GND pours (re-runnable; see its docstring).
-- `production/` — fab outputs for this revision, named `FEHA-LSC-001-01-Controller-Rev-A[-<VARIANT>]-<fab>-<YYYYMMDD>.zip`.
+- `production/` — fab outputs from the KiCad Fabrication Toolkit (2026-10-07):
+  `LED_Strip_Controller_A.zip` (Gerbers and drill files), `bom.csv`, `positions.csv`,
+  `designators.csv`, `netlist.ipc`. The toolkit names the zip from the board title and
+  revision, not the `FEHA-LSC-001-01-Controller-Rev-A-<fab>-<YYYYMMDD>.zip` convention.
 
 ## Tooling
 
@@ -31,4 +34,5 @@ Files are **KiCad 10 format** (`version 20260306`).
 
 ## Revision history
 
-- Rev A — initial design: schematic and layout complete, not yet fabricated.
+- Rev A — initial design: schematic and layout complete, manufacturing files generated
+  2026-10-07, not yet ordered.

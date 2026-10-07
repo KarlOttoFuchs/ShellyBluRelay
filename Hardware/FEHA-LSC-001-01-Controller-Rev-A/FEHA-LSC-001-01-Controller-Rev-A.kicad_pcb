@@ -18127,6 +18127,45 @@
 			(justify bottom)
 		)
 	)
+	(gr_text "24V DC\nONLY"
+		(at 101.3272 101.3348 0)
+		(layer "F.SilkS")
+		(uuid "e55fc2df-e58c-40e3-a192-da9bee5c6848")
+		(effects
+			(font
+				(size 1.2 1.2)
+				(thickness 0.24)
+				(bold yes)
+			)
+			(justify left top)
+		)
+	)
+	(gr_text "USB:24V OFF"
+		(at 132.62 127.3698 0)
+		(layer "F.SilkS")
+		(uuid "c46321cd-d0f5-4d59-8301-5d01e58bcf0c")
+		(effects
+			(font
+				(size 1.2 1.2)
+				(thickness 0.24)
+				(bold yes)
+			)
+			(justify left top)
+		)
+	)
+	(gr_text "LOAD MAX 1A\nPSU MAX 30W"
+		(at 135.1854 101.3348 0)
+		(layer "F.SilkS")
+		(uuid "eb5c241d-0dcd-465e-98a7-015decfce52f")
+		(effects
+			(font
+				(size 1.2 1.2)
+				(thickness 0.24)
+				(bold yes)
+			)
+			(justify left top)
+		)
+	)
 	(gr_text "OUT"
 		(at 149.05 125.5 90)
 		(layer "F.SilkS")
