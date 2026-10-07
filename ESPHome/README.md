@@ -24,8 +24,8 @@ Home Assistant integration is for *monitoring and configuration* — not the tri
 
 | Sensor | Default Action | Timer |
 |--------|---------------|-------|
-| **Button** (single press) | Toggle relay | No |
-| **Button** (double/triple/long/hold) | Customizable | No |
+| **Button** (single press) | Turn ON relay | Yes |
+| **Button** (double/triple/long/hold) | Customizable | - |
 | **Motion** (detected) | Turn ON relay | Yes |
 | **Door/Window** (opened) | Turn ON relay | Yes |
 
@@ -135,14 +135,14 @@ If WiFi fails:
 
 ### Timer Behavior
 
-The timer only activates for **motion** and **door/window** sensors:
+The timer activates for **all sensor types** (button, motion, door):
 
 - **Timer starts** when sensor triggers relay ON
 - **Timer expires** → relay turns OFF automatically
 - **Retrigger EXTEND** → new trigger resets countdown
 - **Retrigger IGNORE** → new triggers ignored while active
 
-**Button sensors** toggle the relay without timer (manual control).
+All sensors work identically: trigger → relay ON → timer starts.
 
 ### Manual Override
 
@@ -176,6 +176,7 @@ When you control the relay directly from Home Assistant:
 
 | Entity | Type | Description |
 |--------|------|-------------|
+| Device Mode | `text_sensor` | Current mode: Scanner, Unconfigured, or configured MAC |
 | Last Event MAC | `text_sensor` | MAC of last BLU event |
 | Last Event RSSI | `sensor` | Signal strength of last event |
 | Last Event Type | `text_sensor` | Event type (e.g., `motion_detected`) |
@@ -224,9 +225,9 @@ else if (event == 0x02) {  // Double press
 
 ### Timer not working
 
-- Timer only works with motion/door sensors, not button
-- Check relay wasn't turned on manually via HA
+- Check relay wasn't turned on manually via HA (manual control disables timer)
 - Verify `default_timer` is set (1-600)
+- Check "Timer Remaining" sensor in HA to see countdown
 
 ### Scanner mode shows no devices
 
