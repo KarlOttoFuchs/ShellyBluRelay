@@ -63,5 +63,7 @@ view into the `.FCStd`.
   sliced from the model with the board in place (run after `build_enclosure.py`, same
   `freecadcmd -c "exec(open('fit_page.py').read())"` form). Dimension labels come from
   `Params`; the template's prose quotes numbers too, so re-read it after a parameter change.
-  The claude.ai artifact "LSC Tube Fit" is published from the same page.
-- `enclosure-fit.html` — generated fit page (open locally in a browser).
+  The claude.ai artifact "LSC Tube Fit" is published from the same page. The template is
+  input only: it holds the page text and `%%MID%%`-style markers where the drawings go, so
+  opened on its own it shows the markers and no drawings.
+- `enclosure-fit.html` — generated fit page; this is the one to open in a browser.
