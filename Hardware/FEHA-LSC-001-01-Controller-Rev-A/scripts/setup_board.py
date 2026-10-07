@@ -1,6 +1,6 @@
 """FEHA-LSC-001-01 board setup (design spec §0 layout step 2; DEC-29..DEC-33).
 
-Run on the placed board from fit_placement.py, with KiCad closed:
+Run on the placed board, with KiCad closed:
     /Applications/KiCad/KiCad.app/Contents/Frameworks/Python.framework/Versions/Current/bin/python3 \
         scripts/setup_board.py SRC.kicad_pcb DST.kicad_pcb [W]
 W is the board width in mm (default 30, DEC-35). Re-runnable: it replaces the outline, the
@@ -16,7 +16,7 @@ Saving also rewrites .kicad_pro/.kicad_prl beside DST: use a scratch DST and cop
   over the notch on all 4 layers (DEC-31)
 - GND pour on L1..L4 over the whole board (DEC-30)
 
-Board frame as in fit_placement.py: X along the board, Y across (+Y = antenna edge), drawn at
+Board frame: X along the board, Y across (+Y = antenna edge), drawn at
 KiCad (100, 100): kx = 100 + X, ky = 100 + W - Y.
 """
 import math

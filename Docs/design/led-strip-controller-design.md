@@ -9,7 +9,7 @@ written here cannot be reviewed against (DOC-4).
 
 ## 0. Roadmap — session pickup point
 
-Last updated: 2026-10-06
+Last updated: 2026-10-07
 
 - **Settled:** load and output stage (DEC-01…DEC-06), power (DEC-07, DEC-08), input protection
   (DEC-09…DEC-12), connectors, USB, UI and enclosure (DEC-13…DEC-16), module (DEC-27), status
@@ -25,18 +25,18 @@ Last updated: 2026-10-06
 - **Layout gate: CLOSED 2026-10-06**
   ([`reviews/layout-2026-10-06-controller.md`](reviews/layout-2026-10-06-controller.md),
   checklist v1.3): all findings dispositioned (DEC-40); DRC 0 unconnected, 0 unexcluded errors.
-  Carried to the fab gate: enclosure fit and wire entry (L-PLACE-3/5), fiducials, position file.
+  Carried to the fab gate: fiducials, position file. Enclosure fit and wire entry (L-PLACE-3/5)
+  closed on the model 2026-10-07 (fit check in `build_enclosure.py`); the test print confirms them.
 - **Blocked on:** —
-- **Layout decisions 2026-10-06:** wall groove (DEC-29); board 50 × 25 mm, 4 layers, stack-up
-  L1 routing + GND / L2 GND / L3 GND / L4 routing + GND (DEC-30); antenna notch (DEC-31); debug
-  header above CN2, adapter lying flat over the +Y edge (DEC-32); vias, netclasses, origin
-  (DEC-33). Placement proven at courtyard level by
-  `Hardware/FEHA-LSC-001-01-Controller-Rev-A/scripts/fit_placement.py` (all 40 parts, no overlaps).
+- **Layout decisions 2026-10-06:** wall groove (DEC-29); 4 layers, stack-up L1 routing + GND /
+  L2 GND / L3 GND / L4 routing + GND (DEC-30; its 50 × 25 mm size superseded by DEC-35); antenna
+  notch (DEC-31); debug header above CN2, adapter lying flat over the +Y edge (DEC-32); vias,
+  netclasses, origin (DEC-33).
 - **Layout steps 1–2 done 2026-10-06:** placement applied, then Karl placed the buck as one
   block; it did not fit, so the board went to **50 × 30 mm (DEC-35)**: buck block under the
   module, +Y-referenced parts up 5 mm. Karl then refined the placement by hand (incl. D3/R7);
-  the board file is the placement of record (`fit_placement.py` holds the superseded
-  50 × 25 table). Board set up by `scripts/setup_board.py` (width argument; re-runnable, keeps
+  the board file is the placement of record (the courtyard-fit script for the superseded
+  50 × 25 table is in git history). Board set up by `scripts/setup_board.py` (width argument; re-runnable, keeps
   hand-drawn pours): 4 layers, outline with 0.5 mm notch fillets, origin at the centre, CON-3
   part keep-outs on F.Cu, antenna keep-out on L1–L4, GND pours L1–L4. Board rules DEC-34;
   netclasses and pre-defined sizes DEC-36–38
@@ -62,12 +62,12 @@ Last updated: 2026-10-06
      `enclosure_rev_b.py`) builds a parametric document (Params spreadsheet, Tube and Cap
      PartDesign Bodies, OUT cap as a Link, board STEP from KiCad) with the groove (DEC-29) and
      the 30 mm board (DEC-35); S1/D3 positions read from the board file; fit check passes
-     (board slides the full tube, clears both caps); STLs regenerated. Remaining: rebuild the
-     enclosure-fit page (claude.ai artifact "LSC Tube Fit",
-     https://claude.ai/artifact/8Cz9GvjaSQ5Euj6Yx1rkBk) and `Enclosure/.../enclosure-concept.html`
-     to show the final state only: groove section, final placement, PCB rules. No drafts (the
-     page still shows the superseded rails/ribs and earlier proposals). Then print a short tube
-     test section for the groove fit.
+     (board slides the full tube, clears both caps); STLs regenerated. Enclosure-fit page
+     rebuilt 2026-10-07 to the final state only (claude.ai artifact "LSC Tube Fit",
+     https://claude.ai/artifact/8Cz9GvjaSQ5Euj6Yx1rkBk; true-scale sections sliced from the
+     model by `fit_page.py`, which also writes `Enclosure/.../enclosure-fit.html`; the
+     superseded `enclosure-concept.html` is removed). Remaining: print a short tube test
+     section for the groove fit, then the full tube and two caps.
 
 ## 1. What this board is
 
@@ -252,8 +252,8 @@ own antenna (L-SI-2).
    C10) it runs on L1, away from the module (DEC-40). The planes are the main
    heat spreader. "Bottom layer" in rules 1–3 means L4.
 5. **Spread the heat sources:** keep the two MOSFETs, the buck and the ESP32 module apart rather
-   than clustered; keep each heat source ≥ 3 mm from the long board edges, where the PETG
-   rails and hold-down ribs touch the board.
+   than clustered; keep each heat source ≥ 3 mm from the long board edges, where the board
+   sits in the PETG wall groove (DEC-29).
 6. **Current paths for 1 A:** +24 V, input −/GND return and LED−/LED+ as pours or ≥ 1.0 mm
    traces on 1 oz copper. 2 oz copper is optional, not needed.
 7. **Switching loop:** at every PWM edge up to 1 A moves between two paths in ~60 ns. With

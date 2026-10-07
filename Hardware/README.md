@@ -8,8 +8,8 @@ directories named `<PN>-<Slug>-Rev-<X>`.
 
 | Part Number | Slug | Current Revision | Status |
 |---|---|---|---|
-| `FEHA-LSC-001-01` | Controller | [Rev A](FEHA-LSC-001-01-Controller-Rev-A/) | Concept |
-| `FEHA-LSC-001-02` | Enclosure | [Rev A](../Enclosure/FEHA-LSC-001-02-Enclosure-Rev-A/) | Concept |
+| `FEHA-LSC-001-01` | Controller | [Rev A](FEHA-LSC-001-01-Controller-Rev-A/) | Layout complete, fab gate next |
+| `FEHA-LSC-001-02` | Enclosure | [Rev A](../Enclosure/FEHA-LSC-001-02-Enclosure-Rev-A/) | Modelled, test print next |
 
 ### FEHA-LSC-001-01 — Controller
 
@@ -18,8 +18,8 @@ directories named `<PN>-<Slug>-Rev-<X>`.
 
 ### FEHA-LSC-001-02 — Enclosure
 
-- **[Rev A](../Enclosure/FEHA-LSC-001-02-Enclosure-Rev-A/)** *(current)* — concept: inline
-  slide-in tube with two identical snap-on end caps. See its
+- **[Rev A](../Enclosure/FEHA-LSC-001-02-Enclosure-Rev-A/)** *(current)* — parametric FreeCAD model:
+  inline slide-in tube with a full-length board groove and two identical snap-on end caps. See its
   [README](../Enclosure/FEHA-LSC-001-02-Enclosure-Rev-A/README.md).
 
 ## FEHA-RM-001 — Relay Module

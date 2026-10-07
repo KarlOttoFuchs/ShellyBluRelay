@@ -1,0 +1,159 @@
+<title>LSC Tube Fit</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;600&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<style>
+/* Layout: one reading column of drawing plates, each a true-scale section cut from the FreeCAD model, with a short caption. */
+:root {
+  --bg: #f6f7f5; --fg: #1d2421; --muted: #5a6661; --rule: #d3d9d5; --panel: #ffffff;
+  --tube: #d9d2c3; --cap: #9fb8d4; --pcb: #3f8a5a; --part: #8a939b; --mcu: #5d656c; --conn: #c4c8cc;
+  --keep: #d23c3c; --hole: #c98a12; --ok: #2f8f4e; --accent: #b4561f; --label: #10140f;
+  --sans: "IBM Plex Sans", system-ui, -apple-system, sans-serif;
+  --mono: "IBM Plex Mono", ui-monospace, Menlo, monospace;
+}
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) {
+  --bg: #141816; --fg: #e3e8e5; --muted: #98a39e; --rule: #2d3531; --panel: #1b201d;
+  --tube: #5a5444; --cap: #3d5673; --pcb: #3c7a52; --part: #7b838b; --mcu: #9aa2a9; --conn: #59606a;
+  --keep: #f0706f; --hole: #f2b544; --ok: #5cc27e; --accent: #e08a4f; --label: #f2f5f3; color-scheme: dark } }
+:root[data-theme="dark"] {
+  --bg: #141816; --fg: #e3e8e5; --muted: #98a39e; --rule: #2d3531; --panel: #1b201d;
+  --tube: #5a5444; --cap: #3d5673; --pcb: #3c7a52; --part: #7b838b; --mcu: #9aa2a9; --conn: #59606a;
+  --keep: #f0706f; --hole: #f2b544; --ok: #5cc27e; --accent: #e08a4f; --label: #f2f5f3; color-scheme: dark }
+* { box-sizing: border-box; }
+body { margin: 0; background: var(--bg); color: var(--fg); font: 15px/1.55 var(--sans); }
+main { max-width: 920px; margin: 0 auto; padding-inline: 16px; padding-block: 28px 64px;
+  display: flex; flex-direction: column; gap: 24px; }
+h1 { font-size: 1.55rem; margin: 0; text-wrap: balance; }
+h2 { font-size: 1.05rem; margin: 0; text-wrap: balance; }
+p { margin: 0; max-width: 68ch; }
+code { font-family: var(--mono); font-size: 0.88em; }
+header { display: flex; flex-direction: column; gap: 8px; }
+.sub { color: var(--muted); }
+.plate { background: var(--panel); border: 1px solid var(--rule); border-radius: 6px; padding: 14px;
+  display: flex; flex-direction: column; gap: 10px; min-width: 0; }
+.plate.pass { border-color: var(--ok); }
+.tag { font: 500 0.72rem var(--mono); letter-spacing: 0.06em; text-transform: uppercase; color: var(--muted); }
+.pass .tag { color: var(--ok); }
+.draw { overflow-x: auto; }
+svg { display: block; width: 100%; min-width: 560px; height: auto; }
+svg.zoom { min-width: 480px; }
+svg text { fill: var(--fg); font-family: var(--mono); }
+svg * { vector-effect: non-scaling-stroke; }
+.ts { fill: var(--muted); }
+.tube { fill: var(--tube); stroke: var(--fg); stroke-width: 0.8px; fill-rule: evenodd; }
+.cap { fill: var(--cap); fill-opacity: 0.75; stroke: var(--fg); stroke-width: 0.8px; fill-rule: evenodd; }
+.pcb { fill: var(--pcb); stroke: var(--fg); stroke-width: 0.5px; fill-rule: evenodd; }
+.part { fill: var(--part); stroke: var(--fg); stroke-width: 0.4px; fill-rule: evenodd; }
+.mcu { fill: var(--mcu); stroke: var(--fg); stroke-width: 0.4px; fill-rule: evenodd; }
+.conn { fill: var(--conn); stroke: var(--fg); stroke-width: 0.4px; fill-rule: evenodd; }
+.tubeline { fill: none; stroke: var(--fg); stroke-width: 1px; }
+.hidden { fill: none; stroke: var(--muted); stroke-width: 0.7px; stroke-dasharray: 3 2; }
+.capflat { fill: var(--cap); fill-opacity: 0.55; stroke: var(--fg); stroke-width: 0.7px; fill-rule: evenodd; }
+.pcbflat { fill: var(--pcb); fill-opacity: 0.3; stroke: var(--fg); stroke-width: 0.6px; fill-rule: evenodd; }
+.partflat { fill: var(--part); stroke: var(--fg); stroke-width: 0.3px; fill-rule: evenodd; }
+.connflat { fill: var(--conn); stroke: var(--fg); stroke-width: 0.4px; fill-rule: evenodd; }
+.mcuflat { fill: var(--mcu); fill-opacity: 0.85; stroke: var(--fg); stroke-width: 0.4px; fill-rule: evenodd; }
+.keep { fill: var(--keep); fill-opacity: 0.22; }
+.hole { fill: none; stroke: var(--hole); stroke-width: 2px; }
+.ghost { fill: none; stroke: var(--accent); stroke-width: 1.2px; stroke-dasharray: 4 2.5; }
+.lead { stroke: var(--muted); stroke-width: 0.7px; fill: none; }
+.dim { stroke: var(--accent); stroke-width: 0.8px; fill: none; }
+.dimt { fill: var(--accent); }
+svg text.fl { fill: var(--label); font-weight: 500; paint-order: stroke; stroke: var(--panel); stroke-width: 2.5px; }
+table { border-collapse: collapse; width: 100%; font-size: 0.88rem; }
+th, td { text-align: left; padding: 6px 8px; border-bottom: 1px solid var(--rule); vertical-align: top; }
+th { color: var(--muted); font-weight: 600; }
+td.n { font-family: var(--mono); font-variant-numeric: tabular-nums; white-space: nowrap; }
+.tablewrap { overflow-x: auto; }
+.key { display: flex; flex-wrap: wrap; gap: 6px 16px; font-size: 0.82rem; color: var(--muted); }
+.key span::before { content: ""; display: inline-block; width: 10px; height: 10px; margin-right: 6px;
+  vertical-align: -1px; border-radius: 2px; background: var(--c); }
+.figs { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 1px;
+  background: var(--rule); border: 1px solid var(--rule); border-radius: 6px; overflow: hidden; }
+.figs div { background: var(--panel); padding: 10px 12px; display: flex; flex-direction: column; gap: 2px; }
+.figs b { font: 500 1.05rem var(--mono); font-variant-numeric: tabular-nums; }
+.figs span { font-size: 0.78rem; color: var(--muted); }
+</style>
+
+<main>
+  <header>
+    <div class="tag">FEHA-LSC-001-02 Rev A · enclosure for FEHA-LSC-001-01</div>
+    <h1>How the controller sits in the tube</h1>
+    <p class="sub">Every drawing is a true-scale section cut from the FreeCAD model (<code>build_enclosure.py</code>), with the routed board's KiCad STEP in place. Cross-sections are seen from the OUT end, so the antenna side (+Y) is on the right; component side up.</p>
+  </header>
+
+  <div class="figs">
+    <div><b>50.4 × 34.2 × 12.2</b><span>tube, mm</span></div>
+    <div><b>103.4 × 37.8 × 15.8</b><span>overall with caps and tabs, mm</span></div>
+    <div><b>1.9 × 1.0</b><span>wall groove, full length (DEC-29)</span></div>
+    <div><b>1.15</b><span>mm from the connectors to the roof</span></div>
+  </div>
+
+  <section class="plate pass">
+    <div class="tag">Fit check · passes</div>
+    <h2>The board slides the whole tube length without touching it</h2>
+    <p>The script sweeps every one of the board's 34 parts along the full tube and tests it against the walls, then checks both caps. Nothing touches. The check is real: with 4 mm of headroom the connectors hit, and with no groove clearance the board edge hits.</p>
+  </section>
+
+  <div class="key">
+    <span style="--c: var(--tube)">Tube (PETG)</span>
+    <span style="--c: var(--cap)">End caps</span>
+    <span style="--c: var(--pcb)">PCB</span>
+    <span style="--c: var(--conn)">Push-in connectors</span>
+    <span style="--c: var(--mcu)">ESP32-C3-MINI-1</span>
+    <span style="--c: var(--part)">Other parts</span>
+    <span style="--c: var(--keep)">1.0 mm edge keep-out</span>
+  </div>
+
+  <section class="plate">
+    <div class="tag">Section A · tube middle, through the module (X = 0)</div>
+    <h2>The board rides in a groove in each side wall</h2>
+    <div class="draw">%%MID%%</div>
+    <p>The side walls are 2.8 mm so the groove leaves 1.8 mm of wall behind it. There are no rails or ribs. The board is held along both long edges for its whole length, with 1.5 mm of air underneath (no parts on the bottom). The antenna hangs over the 15.2 × 6.6 mm board notch, and the tube is PETG, so nothing metal is near it.</p>
+  </section>
+
+  <section class="plate">
+    <div class="tag">Detail · board edge in the groove (−Y side)</div>
+    <h2>0.7 mm of overlap, 0.3 mm of play</h2>
+    <div class="draw">%%GROOVE%%</div>
+    <p>The slot is the 1.6 mm board plus 0.3 mm. Printed standing on end, the slot height comes from XY accuracy and has no bridge to sag. FDM slots come out 0.1–0.2 mm tight, so print a short test section first.</p>
+  </section>
+
+  <section class="plate">
+    <div class="tag">Section B · IN end, through the connector and cap sleeve (X = −22.95)</div>
+    <h2>The wires leave straight through the cable exit</h2>
+    <div class="draw">%%CONN%%</div>
+    <p>The cap's sleeve slides 8 mm over the tube and snaps onto detents in the side walls. The push-in wire entries sit 6.7 mm above the tube floor, which is the height of the cable exit's centre, so the two cores run straight from the cable to the connector.</p>
+  </section>
+
+  <section class="plate">
+    <div class="tag">Section C · lengthwise, through one wire entry (Y = 2.0)</div>
+    <h2>Two identical caps trap the tube</h2>
+    <div class="draw">%%LONG%%</div>
+    <p>Each cap has a 12 mm cable chamber for stripping and fanning out the cores, a 2.5 mm end plate, and a screw tab flush with the mounting face. The tube butts against stop ribs inside each cap; the board has 0.2 mm of play at each end. The OUT cap is the same printed part turned 180°.</p>
+  </section>
+
+  <section class="plate">
+    <div class="tag">Top view · board in the tube, component side up</div>
+    <h2>Pinhole and LED window line up with S1 and D3</h2>
+    <div class="draw">%%TOP%%</div>
+    <p>The pinhole (Ø1.6) and the LED window (Ø3.2) are placed from the board file's S1 and D3 positions on every rebuild, so they follow any placement change. Dashed lines are the groove floors. The red strips are the 1.0 mm top-side keep-out the groove asks for along both long edges.</p>
+  </section>
+
+  <section class="plate">
+    <div class="tag">What this asks of the PCB</div>
+    <div class="tablewrap">
+    <table>
+      <thead><tr><th>Rule</th><th>Value</th><th>Why</th></tr></thead>
+      <tbody>
+        <tr><td>Board outline</td><td class="n">50 × 30 mm</td><td>Sets the tube's length and width (CON-2, DEC-35)</td></tr>
+        <tr><td>Top-side keep-out, both long edges, full length</td><td class="n">1.0 mm</td><td>0.7 mm groove overlap + 0.3 mm tolerance; the whole edge passes the groove lip on insertion (CON-3, DEC-29)</td></tr>
+        <tr><td>Bottom side</td><td class="n">no parts</td><td>1.5 mm air gap under the board</td></tr>
+        <tr><td>Tallest part</td><td class="n">≤ 4.5 mm</td><td>Connectors are 4.44 mm and clear the roof by 1.15 mm (CON-2)</td></tr>
+        <tr><td>Module inset from +Y edge</td><td class="n">1.3 mm</td><td>Keeps the module clear of the wall face above the groove (DEC-29)</td></tr>
+        <tr><td>Antenna notch</td><td class="n">15.2 × 6.6 mm</td><td>Board cut away below and beside the antenna (DEC-31)</td></tr>
+        <tr><td>Board ends</td><td class="n">nothing overhangs</td><td>The ends face the cap stop ribs; connector bodies end 0.75 mm inside the edge</td></tr>
+        <tr><td>Debug header CN3</td><td class="n">not fitted</td><td>Bench-only (DEC-14, DEC-32); a fitted header would not fit in the tube</td></tr>
+      </tbody>
+    </table>
+    </div>
+  </section>
+</main>

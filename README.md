@@ -6,6 +6,11 @@ A BLE-enabled relay controller for home automation. Connect Shelly BLU sensors t
 
 > **Note:** This project is provided as-is. No support, issues, or pull requests will be addressed.
 
+This repository also holds the **LED Strip Controller** (`FEHA-LSC-001`, in design): a 24 V COB
+LED-strip dimmer in an inline printed tube. See [`Hardware/README.md`](Hardware/README.md) and
+the design spec [`Docs/design/led-strip-controller-design.md`](Docs/design/led-strip-controller-design.md).
+The rest of this README describes the relay module (`FEHA-RM-001` Rev A).
+
 ## Features
 
 - **BTHome v2 sensor support** — Shelly BLU Button, Motion, and Door/Window sensors

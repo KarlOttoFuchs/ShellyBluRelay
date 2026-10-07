@@ -5,9 +5,9 @@ Controller PCB `FEHA-LSC-001-01`. Each cap has a screw tab centred under its cab
 on with snap detents; once mounted, the two tab screws fix the caps and trap the tube. Overall
 103.4 (incl. tabs) × 37.8 × 15.8 mm; tube 50.4 × 34.2 × 12.2 mm.
 
-**Status:** Model updated to the board as routed (50 × 30 mm, DEC-35) and the wall groove
-(DEC-29), 2026-10-06; fit check passes. Not yet printed. Constraints it puts on the PCB are the
-design spec's CON-2 and CON-3
+**Status:** Modelled to the board as routed (50 × 30 mm, DEC-35) with the wall groove (DEC-29),
+2026-10-06; fit check passes. Not yet printed: a short tube test section comes first.
+Constraints it puts on the PCB are the design spec's CON-2 and CON-3
 ([`../../Docs/design/led-strip-controller-design.md`](../../Docs/design/led-strip-controller-design.md)).
 
 ## Board retention (DEC-29)
@@ -59,5 +59,9 @@ view into the `.FCStd`.
 - `FEHA-LSC-001-02-Enclosure-Rev-A_Tube.stl` / `_Cap.stl` — print files (tube standing on end;
   cap as modelled, print it twice).
 - `FEHA-LSC-001-02-Enclosure-Rev-A_Tube.step` / `_Cap.step` — the printed parts as STEP.
-- `enclosure-concept.html` — concept sketch; still shows the superseded rails/ribs (design spec
-  §0 step 4).
+- `fit_page.py` + `fit_page_template.html` — generate `enclosure-fit.html`, true-scale sections
+  sliced from the model with the board in place (run after `build_enclosure.py`, same
+  `freecadcmd -c "exec(open('fit_page.py').read())"` form). Dimension labels come from
+  `Params`; the template's prose quotes numbers too, so re-read it after a parameter change.
+  The claude.ai artifact "LSC Tube Fit" is published from the same page.
+- `enclosure-fit.html` — generated fit page (open locally in a browser).

@@ -106,3 +106,7 @@ the fixed board (fresh DRC: 0 unconnected, 0 parity, 0 unexcluded errors). No op
 Major or Minor; all findings dispositioned (L-1, L-3, L-4 fixed; L-5, L-6 by DEC-40; L-2
 withdrawn; L-7, A-L1, A-L2 accepted). Carried to the fab gate: L-PLACE-3 and L-PLACE-5
 (enclosure step 4), fiducials and position-file content. Profile `current_gate: fab`.
+
+## Addendum 2026-10-07 — carried enclosure items
+
+L-PLACE-3 and L-PLACE-5 closed on the model: `Enclosure/FEHA-LSC-001-02-Enclosure-Rev-A/build_enclosure.py` builds the groove tube around the board's KiCad STEP, sweeps every board part along the full tube length and checks both caps: no contact. The push-in wire entries (y ±2.0, 6.7 mm above the tube floor) are centred on the Ø6.5 cable exit. Physical confirmation is the tube test print (design spec §0 step 4).
